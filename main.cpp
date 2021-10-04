@@ -27,10 +27,6 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    /** Docasne **/
-    //popcl->set_address("pop3.centrum.sk");
-    //popcl->set_port("110");
-
     popcl->establish_connection();
 
 

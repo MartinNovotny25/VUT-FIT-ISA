@@ -8,6 +8,7 @@
 #include <iostream>
 #include <utility>
 #include <unistd.h>
+#include <fstream>
 
 #include <netdb.h>
 #include <sys/socket.h>
@@ -54,6 +55,11 @@ void POP3_handler::set_auth_file(std::string in_file){
 void POP3_handler::set_out_dir(std::string in_dir){
     out_dir = std::move(in_dir);
 }
+void POP3_handler::set_send_buffer(std::string msg) {
+    char *temp= new char [msg.length()+1];
+    strcpy (temp, msg.c_str());
+    send_buffer = temp;
+}
 void POP3_handler::set_flag(int in_flag){
     switch (in_flag)
     {
@@ -92,6 +98,10 @@ void POP3_handler::set_flag(int in_flag){
             exit(69);
     }
 }
+int POP3_handler::set_file_descriptor() {
+    handler_file_descriptor = socket(AF_INET, SOCK_STREAM, 0);
+    return handler_file_descriptor;
+}
 
 /** GETTERS (NISHINOYAs) **/
 std::string POP3_handler::get_address() {
@@ -111,6 +121,15 @@ std::string POP3_handler::get_auth_file(){
 }
 std::string POP3_handler::get_out_dir(){
     return out_dir;
+}
+void POP3_handler::read_recv_buffer() {
+    std::string string_buffer;
+    string_buffer.append(recv_buffer);
+    std::cout << string_buffer << std::endl;
+
+}
+int POP3_handler::get_handler_file_descriptor() {
+    return handler_file_descriptor;
 }
 bool POP3_handler::get_flag(int out_flag){
     switch (out_flag)
@@ -144,13 +163,13 @@ bool POP3_handler::get_flag(int out_flag){
 int POP3_handler::establish_connection() {
 
     // Vytvorenie socketu
-    int client_fd = socket(AF_INET, SOCK_STREAM, 0);
+    int client_fd = this->set_file_descriptor();
     if (client_fd < 0) {
         std::cout << "*** Nevytvoril sa socket" << std::endl;
         return -1;
     }
 
-    struct addrinfo hints;
+    struct addrinfo hints = {0};
     struct addrinfo *result;
     memset(&hints, 0, sizeof(struct addrinfo));
     hints.ai_family = AF_INET;
@@ -161,39 +180,68 @@ int POP3_handler::establish_connection() {
     std::string method_address = this->get_address();
     std::string method_port = this->get_port();
 
-    std::cout << this->get_address() << std::endl;
-    std::cout << this->get_port() << std::endl;
-
+    //std::cout << this->get_address() << std::endl;
+    //std::cout << this->get_port() << std::endl;
 
     int returnCode = getaddrinfo(method_address.c_str(), method_port.c_str(), &hints, &result);
     if (returnCode != 0) {
-        std::cout << "Getaddrinfo error" << std::endl;
+        std::cerr << "Getaddrinfo error" << std::endl;
         return -1;
     }
 
     if (connect(client_fd, result->ai_addr, result->ai_addrlen) == -1) {
-        std::cout << "*** Pripojenie zlyhalo ***" << std::endl;
+        std::cerr << "*** Pripojenie zlyhalo ***" << std::endl;
         return -1;
     }
 
-    std::cout << "*** Connection established" << std::endl;
+    std::cout << "*** Connection established ***" << std::endl;
 
+    /** Teoreticky mozem dat do handleru **/
     /* Premenne pre odosielanie a prijmanie sprav */
-    const char *send_buffer;
-    char recv_buffer[6000];
 
-    if (recv(client_fd, recv_buffer, 6000, 0) < 0) {
+
+    if (recv(client_fd, this->recv_buffer, 6000, 0) < 0) {
         std::cout << "Receive failed" << std::endl;
     }
 
-    std::cout << std::endl << "Data received" << std::endl;
-    std::cout << recv_buffer << std::endl;
+    std::cout << std::endl << "** Data received **" << std::endl;
+    std::cout << this->recv_buffer << std::endl;
+
+    this->authenticate();
 
     freeaddrinfo(result);
-    close_socket(client_fd);
-    return 0;
 
+    if (close_socket(client_fd) == 0)
+    {
+        this->handler_file_descriptor = 0;
+    }
+    return 0;
 }
+int POP3_handler::authenticate()
+{
+    std::string username;
+    std::string password;
+
+    char* username_array = new char [username.length()+1];
+    char* password_array = new char [password.length()+1];;
+
+    std::ifstream authentication_file(this->get_auth_file());
+    getline(authentication_file, username);
+    getline(authentication_file, password);
+
+    this->set_send_buffer("USER " + username);
+
+    std::cout << this->send_buffer << std::endl;
+    send(this->get_handler_file_descriptor(), this->send_buffer, 10, 0);
+    recv(this->get_handler_file_descriptor(), this->recv_buffer, 10, 0);
+    this->read_recv_buffer();
+
+
+    authentication_file.close();
+    return 0;
+}
+
+
 
 int close_socket(int &client_fd) {
     if (close(client_fd) == -1){

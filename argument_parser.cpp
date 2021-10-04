@@ -13,7 +13,6 @@
 
 /** NEZABUDNUT NA IPv6 PODPORU **/
 
-/** TODO - Opravit citanie argumentov **/
 
 int arg_parse(int argc, char *argv[], POP3_handler* pop3_client) {
 
@@ -25,19 +24,21 @@ int arg_parse(int argc, char *argv[], POP3_handler* pop3_client) {
     hints.ai_flags = 0;
     hints.ai_protocol = 0;
 
+    int index;
+
     int option;
     opterr = 0;
 
-    std::cerr << argc << std::endl;
-
-    while (optind < argc) {
-        if ((option = getopt(argc, argv, "p:TSc:C:dna:o:")) != -1)
-        {
+    /** Kod na spracovanie nonoption arguemntov prebraty z
+     * http://www.gnu.org/software/libc/manual/html_node/Example-of-Getopt.html#Example-of-Getopt
+     */
+    while ((option = getopt(argc, argv, "p:TSc:C:dna:o:")) != -1)
             /** Pridat pointer na objekt **/
             switch (option)
             {
                 case 'p':
                 {
+                    int optarg_to_int = 0;
                     if (pop3_client->get_flag(PORT_FLAG) == true)
                     {
                         std::cerr << "Reduntantny -p option" << std::endl;
@@ -45,7 +46,17 @@ int arg_parse(int argc, char *argv[], POP3_handler* pop3_client) {
                     }
                     else
                     {
-                        int optarg_to_int = std::stoi(optarg, nullptr, 10);
+                        try
+                        {
+                            optarg_to_int = std::stoi(optarg, nullptr, 10);
+                        }
+                        catch (std::invalid_argument& error)
+                        {
+                            std::cerr << "Invalid port" << std::endl;
+                            return -1;
+                        }
+
+
                         if (optarg_to_int < 0 or optarg_to_int > 65535) {
                             std::cerr << "Port number out of range" << std::endl;
                             return -1;
@@ -167,40 +178,50 @@ int arg_parse(int argc, char *argv[], POP3_handler* pop3_client) {
 
                 case '?':
                 {
-                    std::cout << "???????" << std::endl;
-                    break;
+                    if (optopt == 'p') {std::cerr << "Option -p requires a port number as argument" << std::endl;}
+                    else if (optopt == 'c') {std::cerr << "Option -c requires a certification file as argument" << std::endl;}
+                    else if (optopt == 'C') {std::cerr << "Option -C requires a path to the certification file as argument" << std::endl;}
+                    else if (optopt == 'a') {std::cerr << "Option -a requires an auth file as argument" << std::endl;}
+                    else if (optopt == 'o') {std::cerr << "Option -o requires an out dir as argument" << std::endl;}
+                    else {std::cerr << "Unknown option character" << std::endl;}
+                    return -1;
                 }
 
                 default:
-                {
-                    std::cerr << "SWITCH default option" << std::endl;
-                    return -1;
-                }
+                    abort();
             }
-        }
-        else
-        {
-            if (pop3_client->get_flag(ADDR_FLAG) == true)
+
+            for (index = optind; index < argc; index++)
             {
-                std::cerr << "Reduntantna adresa" << std::endl;
-                return -1;
-            }
-            else {
-                struct in_addr inaddr = {0};
-                if (inet_pton(AF_INET, argv[optind], &inaddr) != 1) {
-                    std::cerr << argv[optind] << std::endl;
-                    std::cerr << "Nespravna IP adresa" << std::endl;
+                if (pop3_client->get_flag(ADDR_FLAG) == true)
+                {
+                    std::cerr << "Reduntantna adresa" << std::endl;
                     return -1;
-                } else {
-                    pop3_client->set_address(argv[optind]);
+                }
+                else
+                {
+                    struct in_addr inaddr = {0};
+                    if (inet_pton(AF_INET, argv[optind], &inaddr) != 1) {
+                        //std::cerr << argv[optind] << std::endl;
+                        std::cerr << "Nespravna IP adresa" << std::endl;
+                        return -1;
+                    }
+                    else
+                    {
+                        pop3_client->set_address(argv[optind]);
 
-                    std::cout << "HERE" << std::endl;
-                    std::cout << argv[optind] << std::endl;
+                        //std::cout << argv[optind] << std::endl;
 
-                    pop3_client->set_flag(ADDR_FLAG);
-                    optind++;
+                        pop3_client->set_flag(ADDR_FLAG);
+                    }
                 }
             }
-        }
-    }
+
+            return 0;
+
+    //}
+
+
 }
+
+

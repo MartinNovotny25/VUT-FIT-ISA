@@ -33,6 +33,10 @@ private:
     std::string cert_location;
     std::string auth_file;
     std::string out_dir;
+    int handler_file_descriptor;
+    char recv_buffer[6000];
+    char *send_buffer;
+
 
     bool portFlag;
     bool addrFlag;
@@ -55,6 +59,8 @@ public:
     void set_cert_path(std::string in_path);
     void set_auth_file(std::string in_file);
     void set_out_dir(std::string in_dir);
+    void set_send_buffer(std::string msg);
+    int set_file_descriptor();
 
     std::string get_address();
     std::string get_port();
@@ -63,8 +69,11 @@ public:
     std::string get_cert_path();
     std::string get_auth_file();
     std::string get_out_dir();
+    int get_handler_file_descriptor();
+    void read_recv_buffer();
 
     int establish_connection();
+    int authenticate();
 
 };
 
