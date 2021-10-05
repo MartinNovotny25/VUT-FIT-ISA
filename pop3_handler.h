@@ -35,7 +35,7 @@ private:
     std::string out_dir;
     int handler_file_descriptor;
     char recv_buffer[6000];
-    char *send_buffer;
+    std::string send_buffer;
 
 
     bool portFlag;
@@ -70,7 +70,9 @@ public:
     std::string get_auth_file();
     std::string get_out_dir();
     int get_handler_file_descriptor();
-    void read_recv_buffer();
+    std::string read_recv_buffer();
+
+    void flush_recv_buffer();
 
     int establish_connection();
     int authenticate();

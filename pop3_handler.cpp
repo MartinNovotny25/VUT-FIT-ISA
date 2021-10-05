@@ -56,9 +56,9 @@ void POP3_handler::set_out_dir(std::string in_dir){
     out_dir = std::move(in_dir);
 }
 void POP3_handler::set_send_buffer(std::string msg) {
-    char *temp= new char [msg.length()+1];
-    strcpy (temp, msg.c_str());
-    send_buffer = temp;
+    //char *temp= new char [msg.length()+1];
+    //strcpy (temp, msg.c_str());
+    send_buffer = msg;
 }
 void POP3_handler::set_flag(int in_flag){
     switch (in_flag)
@@ -122,11 +122,12 @@ std::string POP3_handler::get_auth_file(){
 std::string POP3_handler::get_out_dir(){
     return out_dir;
 }
-void POP3_handler::read_recv_buffer() {
+
+std::string POP3_handler::read_recv_buffer() {
     std::string string_buffer;
     string_buffer.append(recv_buffer);
-    std::cout << string_buffer << std::endl;
-
+    //memset(recv_buffer, 0, 100);
+    return string_buffer;
 }
 int POP3_handler::get_handler_file_descriptor() {
     return handler_file_descriptor;
@@ -157,6 +158,13 @@ bool POP3_handler::get_flag(int out_flag){
         default:
             std::cerr << "POP3_handler:get_flag() error" << std::endl;
             exit(420);
+    }
+}
+void POP3_handler::flush_recv_buffer(){
+
+    std::cout << "****************** FLUSHING CONTENTS ***********************" << std::endl;
+    if (strlen(recv_buffer) > 0) {
+        memset(recv_buffer, 0, sizeof(recv_buffer));
     }
 }
 
@@ -205,7 +213,7 @@ int POP3_handler::establish_connection() {
     }
 
     std::cout << std::endl << "** Data received **" << std::endl;
-    std::cout << this->recv_buffer << std::endl;
+    std::cout << this->recv_buffer;
 
     this->authenticate();
 
@@ -221,21 +229,33 @@ int POP3_handler::authenticate()
 {
     std::string username;
     std::string password;
+    std::string pop3_reply;
 
-    char* username_array = new char [username.length()+1];
-    char* password_array = new char [password.length()+1];;
+    memset(recv_buffer, 0, 300); // Vynulujeme buffer
+
+    int client_fd = this->get_handler_file_descriptor();
 
     std::ifstream authentication_file(this->get_auth_file());
     getline(authentication_file, username);
     getline(authentication_file, password);
 
-    this->set_send_buffer("USER " + username);
+    this->set_send_buffer("USER " + username + "\r\n");
 
-    std::cout << this->send_buffer << std::endl;
-    send(this->get_handler_file_descriptor(), this->send_buffer, 10, 0);
-    recv(this->get_handler_file_descriptor(), this->recv_buffer, 10, 0);
-    this->read_recv_buffer();
+    std::cout << this->send_buffer;
+    send(this->get_handler_file_descriptor(), send_buffer.c_str(), send_buffer.length(), 0);
+    recv(this->get_handler_file_descriptor(), this->recv_buffer, 20, 0);
+    pop3_reply = this->read_recv_buffer();
+    std::cout << pop3_reply;
+    this->flush_recv_buffer();
 
+    this->set_send_buffer("PASS " + password + "\r\n");
+
+    std::cout << this->send_buffer;
+    send(this->get_handler_file_descriptor(), this->send_buffer.c_str(), send_buffer.length(), 0);
+    recv(this->get_handler_file_descriptor(), this->recv_buffer, 60, 0);
+    pop3_reply = this->read_recv_buffer();
+    std::cout << pop3_reply;
+    this->flush_recv_buffer();
 
     authentication_file.close();
     return 0;
