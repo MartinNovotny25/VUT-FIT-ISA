@@ -17,6 +17,8 @@
 #include <openssl/err.h>
 #include <openssl/bio.h>
 
+#include "file_parser.h"
+
 /** Makra pre flagy na gettery **/
 #define PORT_FLAG 0
 #define ADDR_FLAG 1

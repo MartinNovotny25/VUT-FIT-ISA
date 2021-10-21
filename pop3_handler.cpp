@@ -208,20 +208,6 @@ int POP3_handler::establish_connection()
 
 int POP3_handler::authenticate()
 {
-    PRINT(this->out_dir);
-    PRINT(this->address);
-    PRINT(this->port);
-    PRINT(this->auth_file);
-
-
-
-
-
-
-
-
-
-
     std::string username;
     std::string password;
     std::string pop3_reply;
@@ -286,10 +272,12 @@ int POP3_handler::receive(int msg_count)
     {
         std::cout << "MSG " << x << std::endl;
         std::regex termination_rgx ("\r\n.\r\n");
-        std::regex nonTermination_rgx ("\r\n");
+        //std::regex nonTermination_rgx ("\r\n");
+        std::regex ok_rgx("+OK [0-9]* octets\r\n", std::regex_constants::basic);
 
         send_buffer_length = this->set_send_buffer("RETR " + std::to_string(x) + "\r\n");
         BIO_write(this->get_handler_file_descriptor(), (const void *) send_buffer, send_buffer_length);
+        this->flush_recv_buffer();
 
         while (42)
         {
@@ -300,16 +288,20 @@ int POP3_handler::receive(int msg_count)
             /** Odmazeme 3 posledne znaky **/
             if (std::regex_search(msg_text.begin(), msg_text.end(), termination_rgx))
             {
+                if (std::regex_search(msg_text.begin(), msg_text.end(), ok_rgx)) {
+                    msg_text = std::regex_replace(msg_text, ok_rgx, "") ;
+                }
                 msg_text.erase(msg_text.length()-3, 3);
                 flush_recv_buffer();
                 break;
             }
 
         }
+
         std::cout << "" << msg_text  << "" << std::endl;
 
         /** Zapis do suboru **/
-
+        create_mail_file(this->get_out_dir(), msg_text, x);
 
 
     }

@@ -3,7 +3,8 @@
 //
 
 #include "argument_parser.h"
-#include "unistd.h"
+#include "file_parser.h"
+#include <unistd.h>
 
 #include <netdb.h>
 #include <sys/socket.h>
@@ -156,6 +157,7 @@ int arg_parse(int argc, char *argv[], POP3_handler* pop3_client) {
             else
             {
                 pop3_client->set_out_dir(argv[i+1]);
+                verify_path(argv[i+1], 'o');
                 ++i;
                 pop3_client->set_flag(OUT_DIR_FLAG);
             }
