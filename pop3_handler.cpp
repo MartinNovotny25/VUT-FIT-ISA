@@ -9,9 +9,19 @@
 #include <utility>
 #include <unistd.h>
 #include <fstream>
+#include <regex>
+#include <filesystem>
+
+#define PRINT(text) std::cout << text << std::endl
 
 #include <netdb.h>
 #include <sys/socket.h>
+
+/** OPEN SSH HEADERS **/
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/bio.h>
+
 
 #include "pop3_handler.h"
 
@@ -55,10 +65,9 @@ void POP3_handler::set_auth_file(std::string in_file){
 void POP3_handler::set_out_dir(std::string in_dir){
     out_dir = std::move(in_dir);
 }
-void POP3_handler::set_send_buffer(std::string msg) {
-    //char *temp= new char [msg.length()+1];
-    //strcpy (temp, msg.c_str());
-    send_buffer = msg;
+int POP3_handler::set_send_buffer(std::string msg) {
+    send_buffer = msg.c_str();
+    return msg.length();
 }
 void POP3_handler::set_flag(int in_flag){
     switch (in_flag)
@@ -98,10 +107,10 @@ void POP3_handler::set_flag(int in_flag){
             exit(69);
     }
 }
-int POP3_handler::set_file_descriptor() {
+/*int POP3_handler::set_file_descriptor() {
     handler_file_descriptor = socket(AF_INET, SOCK_STREAM, 0);
     return handler_file_descriptor;
-}
+}*/
 
 /** GETTERS (NISHINOYAs) **/
 std::string POP3_handler::get_address() {
@@ -122,15 +131,8 @@ std::string POP3_handler::get_auth_file(){
 std::string POP3_handler::get_out_dir(){
     return out_dir;
 }
-
-std::string POP3_handler::read_recv_buffer() {
-    std::string string_buffer;
-    string_buffer.append(recv_buffer);
-    //memset(recv_buffer, 0, 100);
-    return string_buffer;
-}
-int POP3_handler::get_handler_file_descriptor() {
-    return handler_file_descriptor;
+BIO* POP3_handler::get_handler_file_descriptor() {
+    return pop3_bio;
 }
 bool POP3_handler::get_flag(int out_flag){
     switch (out_flag)
@@ -160,115 +162,157 @@ bool POP3_handler::get_flag(int out_flag){
             exit(420);
     }
 }
-void POP3_handler::flush_recv_buffer(){
 
-    std::cout << "****************** FLUSHING CONTENTS ***********************" << std::endl;
+/** HELPER METHODS **/
+std::string POP3_handler::read_recv_buffer() {
+    std::string string_buffer;
+    string_buffer.append(recv_buffer);
+    return string_buffer;
+}
+void POP3_handler::flush_recv_buffer(){
+    std::cout << std::endl << "****************** FLUSHING CONTENTS ***********************" << std::endl;
     if (strlen(recv_buffer) > 0) {
         memset(recv_buffer, 0, sizeof(recv_buffer));
     }
 }
 
-int POP3_handler::establish_connection() {
-
-    // Vytvorenie socketu
-    int client_fd = this->set_file_descriptor();
-    if (client_fd < 0) {
-        std::cout << "*** Nevytvoril sa socket" << std::endl;
-        return -1;
+int POP3_handler::establish_connection()
+{
+    /** Pridat funckionalitu ak sa nezada port **/
+    std::string connection_string = this->get_address() + ":" + this->get_port();
+    const char* connection_char_array = connection_string.c_str();
+    this->pop3_bio = BIO_new_connect(connection_char_array);
+    if (this->get_handler_file_descriptor() == nullptr)
+    {
+            std::cout << "bio.h: Socket not created" << std::endl;
+            return -1;
     }
 
-    struct addrinfo hints = {0};
-    struct addrinfo *result;
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = 0;
-    hints.ai_protocol = 0;
+    std::cout << "bio.h: Socket created" << std::endl;
 
-    std::string method_address = this->get_address();
-    std::string method_port = this->get_port();
-
-    //std::cout << this->get_address() << std::endl;
-    //std::cout << this->get_port() << std::endl;
-
-    int returnCode = getaddrinfo(method_address.c_str(), method_port.c_str(), &hints, &result);
-    if (returnCode != 0) {
-        std::cerr << "Getaddrinfo error" << std::endl;
-        return -1;
+    if (BIO_do_connect(this->get_handler_file_descriptor()) <= 0)
+    {
+         std::cout << "bio.h: Connection failed" << std::endl;
+         return -1;
     }
 
-    if (connect(client_fd, result->ai_addr, result->ai_addrlen) == -1) {
-        std::cerr << "*** Pripojenie zlyhalo ***" << std::endl;
-        return -1;
-    }
+    std::cout << "bio.h: Connection created" << std::endl;
 
-    std::cout << "*** Connection established ***" << std::endl;
-
-    /** Teoreticky mozem dat do handleru **/
-    /* Premenne pre odosielanie a prijmanie sprav */
-
-
-    if (recv(client_fd, this->recv_buffer, 6000, 0) < 0) {
-        std::cout << "Receive failed" << std::endl;
-    }
-
-    std::cout << std::endl << "** Data received **" << std::endl;
-    std::cout << this->recv_buffer;
+    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
+    std::cout << this->read_recv_buffer() << std::endl;
 
     this->authenticate();
-
-    freeaddrinfo(result);
-
-    if (close_socket(client_fd) == 0)
-    {
-        this->handler_file_descriptor = 0;
-    }
     return 0;
+
 }
+
 int POP3_handler::authenticate()
 {
+    PRINT(this->out_dir);
+    PRINT(this->address);
+    PRINT(this->port);
+    PRINT(this->auth_file);
+
+
+
+
+
+
+
+
+
+
     std::string username;
     std::string password;
     std::string pop3_reply;
+    int msg_count;
+    int send_buffer_length;
+    std::string msg_text;
 
-    memset(recv_buffer, 0, 300); // Vynulujeme buffer
-
-    int client_fd = this->get_handler_file_descriptor();
+    memset(recv_buffer, 0, strlen(recv_buffer)); // Vynulujeme buffer
 
     std::ifstream authentication_file(this->get_auth_file());
     getline(authentication_file, username);
     getline(authentication_file, password);
 
-    this->set_send_buffer("USER " + username + "\r\n");
+    send_buffer_length = this->set_send_buffer("USER " + username + "\r\n");
 
-    std::cout << this->send_buffer;
-    send(this->get_handler_file_descriptor(), send_buffer.c_str(), send_buffer.length(), 0);
-    recv(this->get_handler_file_descriptor(), this->recv_buffer, 20, 0);
-    pop3_reply = this->read_recv_buffer();
-    std::cout << pop3_reply;
+    BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
+    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
+    std::cout << this->read_recv_buffer();
     this->flush_recv_buffer();
 
-    this->set_send_buffer("PASS " + password + "\r\n");
+    send_buffer_length = this->set_send_buffer("PASS " + password + "\r\n");
 
-    std::cout << this->send_buffer;
-    send(this->get_handler_file_descriptor(), this->send_buffer.c_str(), send_buffer.length(), 0);
-    recv(this->get_handler_file_descriptor(), this->recv_buffer, 60, 0);
-    pop3_reply = this->read_recv_buffer();
-    std::cout << pop3_reply;
+    BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
+    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
+    std::cout << this->read_recv_buffer();
     this->flush_recv_buffer();
 
+    send_buffer_length = this->set_send_buffer("STAT\r\n");
+
+    BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
+    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
+    std::cout << this->read_recv_buffer();
+
+    /** Ziskanie poctu mailov **/
+    char container[256];
+    for(int i = 0; i < sizeof(recv_buffer); i++) {
+        if(isdigit(recv_buffer[i+4]) == true)
+        {
+            container[i] = recv_buffer[i+4];
+        }
+        else {
+            this->flush_recv_buffer();
+            break;
+        }
+    }
+
+    const std::string msg_count_string(container);
+    msg_count = strtol(msg_count_string.c_str(), nullptr, 10);
+
+    this->receive(msg_count);
     authentication_file.close();
     return 0;
 }
 
+int POP3_handler::receive(int msg_count)
+{
+    /** Download mailov **/
+    int send_buffer_length;
+    std::string msg_text;
+
+    for(int x = 1; x <= msg_count; ++x)
+    {
+        std::cout << "MSG " << x << std::endl;
+        std::regex termination_rgx ("\r\n.\r\n");
+        std::regex nonTermination_rgx ("\r\n");
+
+        send_buffer_length = this->set_send_buffer("RETR " + std::to_string(x) + "\r\n");
+        BIO_write(this->get_handler_file_descriptor(), (const void *) send_buffer, send_buffer_length);
+
+        while (42)
+        {
+            memset(recv_buffer, '\0', 1000);
+            BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 1000);
+            msg_text.append(this->recv_buffer);
+
+            /** Odmazeme 3 posledne znaky **/
+            if (std::regex_search(msg_text.begin(), msg_text.end(), termination_rgx))
+            {
+                msg_text.erase(msg_text.length()-3, 3);
+                flush_recv_buffer();
+                break;
+            }
+
+        }
+        std::cout << "" << msg_text  << "" << std::endl;
+
+        /** Zapis do suboru **/
 
 
-int close_socket(int &client_fd) {
-    if (close(client_fd) == -1){
-        std::cout << "Failed to close socket file descriptor" << std::endl;
-        return -1;
+
     }
-    std::cout << "Socked closed" << std::endl;
-
     return 0;
 }
+
