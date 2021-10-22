@@ -38,11 +38,36 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    if (popcl->establish_connection() != 0)
+    /** OPEN SSL **/
+    if (popcl->get_flag(T_FLAG) == true) {
+        if (popcl->get_flag(PORT_FLAG) == false)
+        {
+            /** Ak nie je zadany port, pripajame sa na 995 **/
+            popcl->set_port("995");
+        }
+        if (popcl->establish_ssl_connection() != 0) {
+            std::cerr << "Secure Connection not established, exiting" << std::endl;
+            exit(1);
+        }
+
+    /** TLS COMMAND -S **/
+    } else if(popcl->get_flag(S_FLAG) == true)
     {
-        std::cerr << "Connection not established, exiting" << std::endl;
-        exit(1);
-    };
+        if (popcl->establish_tls_connection() != 0) {
+            std::cerr << "TLS connection not established, exiting" << std::endl;
+            exit(1);
+        }
+    }
+
+    /** UNSECURED **/
+    else {
+
+        if (popcl->establish_connection() != 0) {
+            std::cerr << "Unsecure connection not established, exiting" << std::endl;
+            exit(1);
+        }
+    }
+
 
 
     return 0;

@@ -15,10 +15,10 @@ int verify_path(std::string argPath, int type) {
 
     if (type == 'o') {
         if (fs::exists(pathToCheck) == 0 || fs::is_directory(pathToCheck) == 0) {
-            std::cerr << "Directory does not exist, creating" << std::endl;
+            //std::cerr << "Directory does not exist, creating" << std::endl;
             fs::create_directory(pathToCheck);
         } else {
-            std::cerr << "Directory existing" << std::endl;
+            //std::cerr << "Directory existing" << std::endl;
         }
     } else if (type == 'c') {
         if (fs::exists(pathToCheck) == 0 || fs::is_directory(pathToCheck) == 0) {

@@ -170,7 +170,7 @@ std::string POP3_handler::read_recv_buffer() {
     return string_buffer;
 }
 void POP3_handler::flush_recv_buffer(){
-    std::cout << std::endl << "****************** FLUSHING CONTENTS ***********************" << std::endl;
+    //std::cout << std::endl << "****************** FLUSHING CONTENTS ***********************" << std::endl;
     if (strlen(recv_buffer) > 0) {
         memset(recv_buffer, 0, sizeof(recv_buffer));
     }
@@ -188,11 +188,11 @@ int POP3_handler::establish_connection()
             return -1;
     }
 
-    std::cout << "bio.h: Socket created" << std::endl;
+    //std::cout << "bio.h: Socket created" << std::endl;
 
     if (BIO_do_connect(this->get_handler_file_descriptor()) <= 0)
     {
-         std::cout << "bio.h: Connection failed" << std::endl;
+         std::cerr << "bio.h: Connection failed" << std::endl;
          return -1;
     }
 
@@ -202,8 +202,116 @@ int POP3_handler::establish_connection()
     std::cout << this->read_recv_buffer() << std::endl;
 
     this->authenticate();
+
+    BIO_free_all(pop3_bio);
     return 0;
 
+}
+
+int POP3_handler::establish_ssl_connection()
+{
+    SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
+    SSL *ssl;
+
+    /*if(! SSL_CTX_load_verify_locations(ctx, "TrustStore.pem", NULL))
+    {
+        std::cerr << "LOADING TRUST STORE FAILED" << std::endl;
+        exit(-1);
+    }*/
+
+    SSL_CTX_set_default_verify_paths(ctx);
+
+    /** PRIDAT FOLDER PRE DOK **/
+
+   this->pop3_bio = BIO_new_ssl_connect(ctx);
+   BIO_get_ssl(pop3_bio, &ssl);
+   SSL_set_mode(ssl, SSL_MODE_NO_AUTO_CHAIN);
+
+   std::string hostname_port = this->get_address() + ":" + this->get_port();
+//   std::cerr << hostname_port<< std::endl;
+
+
+
+   BIO_set_conn_hostname(pop3_bio, hostname_port.c_str());
+   if (BIO_do_connect(pop3_bio) <= 0)
+   {
+       std::cerr << "bio.h: DO_CONNECT FAILED" << std::endl;
+       exit(-1);
+   }
+
+    if(SSL_get_verify_result(ssl) != X509_V_OK)
+    {
+        std::cerr << "bio.h: CERT NOT VALID" << std::endl;
+        exit(-1);
+    }
+
+    //std::cout << "bio.h: CONNECTED AND CERT VALID" << std::endl;
+
+    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 1024);
+    std::cout << this->read_recv_buffer() << std::endl;
+    this->authenticate();
+
+    SSL_CTX_free(ctx);
+    return 0;
+}
+
+int POP3_handler::establish_tls_connection()
+{
+    /** Pridat funckionalitu ak sa nezada port **/
+    int send_buffer_length;
+    std::string connection_string = this->get_address() + ":" + this->get_port();
+    const char* connection_char_array = connection_string.c_str();
+    this->pop3_bio = BIO_new_connect(connection_char_array);
+    if (this->get_handler_file_descriptor() == nullptr)
+    {
+        std::cout << "bio.h: Socket not created" << std::endl;
+        return -1;
+    }
+
+    //std::cout << "bio.h: Socket created" << std::endl;
+
+    if (BIO_do_connect(this->get_handler_file_descriptor()) <= 0)
+    {
+        std::cerr << "bio.h: Connection failed" << std::endl;
+        return -1;
+    }
+
+    memset(recv_buffer, '\0', strlen(recv_buffer));
+    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
+    std::cout << this->read_recv_buffer() << std::endl;
+    this->flush_recv_buffer();
+    /** SEND STLS COMMAND **/
+
+
+    send_buffer_length = this->set_send_buffer("STLS\r\n");
+    BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
+    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
+
+    std::cout << this->read_recv_buffer() << std::endl;
+    this->flush_recv_buffer();
+
+    std::cout << "bio.h: Connection created" << std::endl;
+    BIO* ret = NULL, *con = NULL, *ssl = NULL;
+
+    SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
+
+    BIO* bio = BIO_new_ssl_connect(ctx);
+
+    if ((ssl = BIO_new_ssl(ctx, 1)) == NULL)
+    {
+        std::cerr << "bio_new_ssl ERROR" << std::endl;
+        exit(-2);
+    }
+
+    if ((ret = BIO_push(ssl, this->pop3_bio)) == NULL)
+    {
+        std::cerr << "bio_push ERROR" << std::endl;
+        exit(-2);
+    }
+
+    this->pop3_bio = ret;
+
+    this->authenticate();
 }
 
 int POP3_handler::authenticate()
@@ -239,7 +347,7 @@ int POP3_handler::authenticate()
 
     BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
-    std::cout << this->read_recv_buffer();
+    //std::cout << this->read_recv_buffer();
 
     /** Ziskanie poctu mailov **/
     char container[256];
@@ -270,7 +378,7 @@ int POP3_handler::receive(int msg_count)
 
     for(int x = 1; x <= msg_count; ++x)
     {
-        std::cout << "MSG " << x << std::endl;
+        //std::cout << "MSG " << x << std::endl;
         std::regex termination_rgx ("\r\n.\r\n");
         //std::regex nonTermination_rgx ("\r\n");
         std::regex ok_rgx("+OK [0-9]* octets\r\n", std::regex_constants::basic);
@@ -295,16 +403,14 @@ int POP3_handler::receive(int msg_count)
                 flush_recv_buffer();
                 break;
             }
-
         }
-
-        std::cout << "" << msg_text  << "" << std::endl;
+        //std::cout << "" << msg_text  << "" << std::endl;
 
         /** Zapis do suboru **/
         create_mail_file(this->get_out_dir(), msg_text, x);
-
-
     }
+
+    std::cout << "Downloaded " << msg_count << " messages." << std::endl;
     return 0;
 }
 

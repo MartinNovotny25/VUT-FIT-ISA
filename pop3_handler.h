@@ -80,6 +80,8 @@ public:
     void flush_recv_buffer();
 
     int establish_connection();
+    int establish_ssl_connection();
+    int establish_tls_connection();
     int authenticate();
     int receive(int msg_count);
 
