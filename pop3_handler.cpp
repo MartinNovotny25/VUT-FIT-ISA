@@ -26,6 +26,7 @@
 #include "pop3_handler.h"
 
 /** Prototypy fukcii **/
+bool check_buffer(char recv_buffer[1024]);
 
 POP3_handler::POP3_handler() {
     address = "";
@@ -201,6 +202,8 @@ int POP3_handler::establish_connection()
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
     std::cout << this->read_recv_buffer() << std::endl;
 
+    sleep(5);
+
     this->authenticate();
 
     BIO_free_all(pop3_bio);
@@ -254,7 +257,6 @@ int POP3_handler::establish_ssl_connection()
     SSL_CTX_free(ctx);
     return 0;
 }
-
 int POP3_handler::establish_tls_connection()
 {
     /** Pridat funckionalitu ak sa nezada port **/
@@ -282,6 +284,9 @@ int POP3_handler::establish_tls_connection()
     this->flush_recv_buffer();
     /** SEND STLS COMMAND **/
 
+    //77.75.78.46
+    //46.255.231.11
+
 
     send_buffer_length = this->set_send_buffer("STLS\r\n");
     BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
@@ -294,8 +299,6 @@ int POP3_handler::establish_tls_connection()
     BIO* ret = NULL, *con = NULL, *ssl = NULL;
 
     SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
-
-    BIO* bio = BIO_new_ssl_connect(ctx);
 
     if ((ssl = BIO_new_ssl(ctx, 1)) == NULL)
     {
@@ -311,7 +314,21 @@ int POP3_handler::establish_tls_connection()
 
     this->pop3_bio = ret;
 
+    std::string username;
+    std::string password;
+
+   /* send_buffer_length = this->set_send_buffer("USER " + username + "\r\n");
+
+    BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
+    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
+    std::cout << this->read_recv_buffer();
+    this->flush_recv_buffer();*/
+
+
+
     this->authenticate();
+
+    return 0;
 }
 
 int POP3_handler::authenticate()
@@ -362,14 +379,23 @@ int POP3_handler::authenticate()
         }
     }
 
+
     const std::string msg_count_string(container);
     msg_count = strtol(msg_count_string.c_str(), nullptr, 10);
 
     this->receive(msg_count);
+
+    send_buffer_length = this->set_send_buffer("QUIT\r\n");
+
+    BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
+    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
+    std::cout << this->read_recv_buffer();
+    this->flush_recv_buffer();
+
+
     authentication_file.close();
     return 0;
 }
-
 int POP3_handler::receive(int msg_count)
 {
     /** Download mailov **/
@@ -379,38 +405,61 @@ int POP3_handler::receive(int msg_count)
     for(int x = 1; x <= msg_count; ++x)
     {
         //std::cout << "MSG " << x << std::endl;
-        std::regex termination_rgx ("\r\n.\r\n");
-        //std::regex nonTermination_rgx ("\r\n");
-        std::regex ok_rgx("+OK [0-9]* octets\r\n", std::regex_constants::basic);
+        static const std::regex termination_rgx ("\r\n\\.\r\n");
+        static std::regex dotByteStuff_rgx ("\r\n\\.\\.");
+        static std::regex ok_rgx("+OK [0-9]* octets\r\n", std::regex_constants::basic);
 
         send_buffer_length = this->set_send_buffer("RETR " + std::to_string(x) + "\r\n");
         BIO_write(this->get_handler_file_descriptor(), (const void *) send_buffer, send_buffer_length);
         this->flush_recv_buffer();
 
-        while (42)
-        {
-            memset(recv_buffer, '\0', 1000);
-            BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 1000);
+
+        while (42) {
+            memset(recv_buffer, '\0', strlen(recv_buffer));
+            BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 1023);
+
+
             msg_text.append(this->recv_buffer);
 
             /** Odmazeme 3 posledne znaky **/
-            if (std::regex_search(msg_text.begin(), msg_text.end(), termination_rgx))
-            {
+            if (std::regex_search(msg_text.begin(), msg_text.end(), termination_rgx)) {
+                std::cerr << "REGEX: TERMINATION REGEX FOUND" << std::endl;
                 if (std::regex_search(msg_text.begin(), msg_text.end(), ok_rgx)) {
-                    msg_text = std::regex_replace(msg_text, ok_rgx, "") ;
+                    msg_text = std::regex_replace(msg_text, ok_rgx, "");
                 }
-                msg_text.erase(msg_text.length()-3, 3);
+                msg_text.erase(msg_text.length() - 3, 3);
                 flush_recv_buffer();
                 break;
             }
+            this->flush_recv_buffer();
         }
-        //std::cout << "" << msg_text  << "" << std::endl;
 
         /** Zapis do suboru **/
-        create_mail_file(this->get_out_dir(), msg_text, x);
+        if (std::regex_search(msg_text.begin(), msg_text.end(), dotByteStuff_rgx))
+        {
+            std::string replaced_text = std::regex_replace(msg_text, dotByteStuff_rgx, "\r\n.");
+            create_mail_file(this->get_out_dir(), replaced_text, x);
+            msg_text.clear();
+        } else {
+            create_mail_file(this->get_out_dir(), msg_text, x);
+            msg_text.clear();
+        }
+
+
+        /** Zmazanie spravy zo servera **/
+        if (this->get_flag(DELETE_FLAG) == true)
+        {
+            send_buffer_length = this->set_send_buffer("DELE " + std::to_string(x) + "\r\n");
+            BIO_write(this->get_handler_file_descriptor(), (const void *) send_buffer, send_buffer_length);
+            this->flush_recv_buffer();
+
+        }
+
     }
 
     std::cout << "Downloaded " << msg_count << " messages." << std::endl;
     return 0;
 }
+
+
 

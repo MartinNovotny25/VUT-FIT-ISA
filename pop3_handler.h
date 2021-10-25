@@ -87,9 +87,6 @@ public:
 
 };
 
-int establish_connection(std::string address, std::string port);
-int close_socket(int &client_fd);
-
 #endif //POP3_CLIENT_POP3_HANDLER_H
 
 
