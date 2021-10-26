@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+
 #include <netdb.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -18,6 +19,11 @@
 
 #include "pop3_handler.h"
 #include "argument_parser.h"
+
+#include <experimental/filesystem>
+#include <iostream>
+#include <fstream>
+
 
 
 /** PORT 110, NAME pop3.centrum.sk, IP 46.255.231.11 **/
@@ -37,6 +43,8 @@ int main(int argc, char *argv[]) {
         std::cerr << "BAD OPTION" << std::endl;
         return 1;
     }
+
+    create_mail_ID_file();
 
     /** OPEN SSL **/
     if (popcl->get_flag(T_FLAG) == true) {
@@ -58,7 +66,6 @@ int main(int argc, char *argv[]) {
             exit(1);
         }
     }
-
     /** UNSECURED **/
     else {
 
@@ -68,12 +75,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-
-
     return 0;
-
-
-
 }
 
 

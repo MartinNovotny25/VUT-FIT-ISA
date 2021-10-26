@@ -84,6 +84,8 @@ public:
     int establish_tls_connection();
     int authenticate();
     int receive(int msg_count);
+    int msg_parser();
+    bool msgID_lookup(std::string id);
 
 };
 

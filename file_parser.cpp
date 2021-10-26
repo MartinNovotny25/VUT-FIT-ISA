@@ -42,3 +42,23 @@ int create_mail_file(std::string out_dir, std::string msg_text, int msg_num)
 
     return 0;
 }
+
+int create_mail_ID_file()
+{
+    if (fs::exists("msg_IDs.txt") == false) {
+        fs::path msgID_dir("msg_IDs.txt");
+        std::ofstream file(msgID_dir);
+        file.close();
+    }
+    return 0;
+}
+
+int add_ID(std::string id)
+{
+    std::ofstream file;
+    file.open("msg_IDs.txt", std::ios::app);
+    file << id + "\n";
+    file.close();
+    return 0;
+
+}
