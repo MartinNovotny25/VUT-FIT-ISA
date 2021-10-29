@@ -11,12 +11,10 @@
 #include "pop3_handler.h"
 
 
-
 int verify_path(std::string argPath, int type);
 int create_mail_file(std::string out_dir, std::string msg_text, int msg_num);
 int create_mail_ID_file();
 int add_ID(std::string id);
-
-
+int count_emails(std::string path);
 
 #endif //POP3CL_FILE_PARSER_H

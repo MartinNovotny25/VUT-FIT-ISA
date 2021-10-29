@@ -10,23 +10,16 @@
 #include <unistd.h>
 #include <fstream>
 #include <regex>
-#include <filesystem>
+#include <experimental/filesystem>
 
 #define PRINT(text) std::cout << text << std::endl
 
-#include <netdb.h>
-#include <sys/socket.h>
 
 /** OPEN SSH HEADERS **/
 #include <openssl/ssl.h>
-#include <openssl/err.h>
 #include <openssl/bio.h>
 
-
 #include "pop3_handler.h"
-
-/** Prototypy fukcii **/
-bool check_buffer(char recv_buffer[1024]);
 
 POP3_handler::POP3_handler() {
     address = "";
@@ -173,7 +166,7 @@ std::string POP3_handler::read_recv_buffer() {
 void POP3_handler::flush_recv_buffer(){
     //std::cout << std::endl << "****************** FLUSHING CONTENTS ***********************" << std::endl;
     if (strlen(recv_buffer) > 0) {
-        memset(recv_buffer, 0, sizeof(recv_buffer));
+        memset(recv_buffer, '\0', sizeof(recv_buffer));
     }
 }
 
@@ -216,24 +209,14 @@ int POP3_handler::establish_ssl_connection()
     SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
     SSL *ssl;
 
-    /*if(! SSL_CTX_load_verify_locations(ctx, "TrustStore.pem", NULL))
-    {
-        std::cerr << "LOADING TRUST STORE FAILED" << std::endl;
-        exit(-1);
-    }*/
-
-    SSL_CTX_set_default_verify_paths(ctx);
-
-    /** PRIDAT FOLDER PRE DOK **/
 
    this->pop3_bio = BIO_new_ssl_connect(ctx);
    BIO_get_ssl(pop3_bio, &ssl);
-   SSL_set_mode(ssl, SSL_MODE_NO_AUTO_CHAIN);
+   SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
 
    std::string hostname_port = this->get_address() + ":" + this->get_port();
 //   std::cerr << hostname_port<< std::endl;
-
-
+    this->load_certs(ctx);
 
    BIO_set_conn_hostname(pop3_bio, hostname_port.c_str());
    if (BIO_do_connect(pop3_bio) <= 0)
@@ -264,6 +247,7 @@ int POP3_handler::establish_tls_connection()
     std::string connection_string = this->get_address() + ":" + this->get_port();
     const char* connection_char_array = connection_string.c_str();
     this->pop3_bio = BIO_new_connect(connection_char_array);
+
     if (this->get_handler_file_descriptor() == nullptr)
     {
         std::cout << "bio.h: Socket not created" << std::endl;
@@ -278,12 +262,13 @@ int POP3_handler::establish_tls_connection()
         return -1;
     }
 
+
     memset(recv_buffer, '\0', strlen(recv_buffer));
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
     std::cout << this->read_recv_buffer() << std::endl;
     this->flush_recv_buffer();
-    /** SEND STLS COMMAND **/
 
+    /** SEND STLS COMMAND **/
     send_buffer_length = this->set_send_buffer("STLS\r\n");
     BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
@@ -292,9 +277,11 @@ int POP3_handler::establish_tls_connection()
     this->flush_recv_buffer();
 
     std::cout << "bio.h: Connection created" << std::endl;
-    BIO* ret = NULL, *con = NULL, *ssl = NULL;
+    BIO* ret = NULL, *ssl = NULL;
 
     SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
+
+    this->load_certs(ctx);
 
     if ((ssl = BIO_new_ssl(ctx, 1)) == NULL)
     {
@@ -309,16 +296,6 @@ int POP3_handler::establish_tls_connection()
     }
 
     this->pop3_bio = ret;
-
-    std::string username;
-    std::string password;
-
-   /* send_buffer_length = this->set_send_buffer("USER " + username + "\r\n");
-
-    BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
-    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
-    std::cout << this->read_recv_buffer();
-    this->flush_recv_buffer();*/
     this->authenticate();
 
     return 0;
@@ -333,7 +310,7 @@ int POP3_handler::authenticate()
     int send_buffer_length;
     std::string msg_text;
 
-    memset(recv_buffer, 0, strlen(recv_buffer)); // Vynulujeme buffer
+    memset(recv_buffer, '\0', strlen(recv_buffer)); // Vynulujeme buffer
 
     std::ifstream authentication_file(this->get_auth_file());
     getline(authentication_file, username);
@@ -390,6 +367,27 @@ int POP3_handler::authenticate()
 int POP3_handler::receive(int msg_count)
 {
     /** Download mailov **/
+    int send_buffer_length = 0;
+    int downloaded_msgs = 0;
+
+
+    for(int msg_id = 1; msg_id <= msg_count; ++msg_id)
+    {
+        send_buffer_length = this->set_send_buffer("RETR " + std::to_string(msg_id) + "\r\n");
+        BIO_write(this->get_handler_file_descriptor(), (const void *) send_buffer, send_buffer_length);
+        this->flush_recv_buffer();
+
+        downloaded_msgs += msg_parser(msg_id);
+
+    }
+
+    std::cout << "Downloaded " << downloaded_msgs << " messages." << std::endl;
+    flush_recv_buffer();
+    return 0;
+}
+
+int POP3_handler::msg_parser(int msg_id)
+{
     int send_buffer_length;
     int downloaded_msgs = 0;
     std::string msg_text;
@@ -398,86 +396,73 @@ int POP3_handler::receive(int msg_count)
     static const std::regex ID_regex("Message-Id: <.+@.+>", std::regex_constants::icase);
     static const std::regex termination_rgx ("\r\n\\.\r\n");
     static std::regex dotByteStuff_rgx ("\r\n\\.\\.");
-    static std::regex ok_rgx("+OK [0-9]* octets\r\n", std::regex_constants::basic);
+    static std::regex ok_rgx("\\+OK (.*)\r\n");
 
-    for(int msg_id = 1; msg_id <= msg_count; ++msg_id)
-    {
-        //std::cout << "MSG " << msg_id << std::endl;
-        send_buffer_length = this->set_send_buffer("RETR " + std::to_string(msg_id) + "\r\n");
-        BIO_write(this->get_handler_file_descriptor(), (const void *) send_buffer, send_buffer_length);
-        this->flush_recv_buffer();
+    /** Zistime pocet emailov, ktore su aktualne v zadanom adresari **/
+    int emails_n = count_emails(this->out_dir);
+    emails_n++;
 
+    while (42) {
+        memset(this->recv_buffer, '\0', strlen(recv_buffer));
+        BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 1023);
+        msg_text.append(this->recv_buffer);
 
-        while (42) {
-            memset(this->recv_buffer, '\0', strlen(recv_buffer));
-            BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 1023);
-            msg_text.append(this->recv_buffer);
+        /** Odmazeme 3 posledne znaky **/
+        if (std::regex_search(msg_text.begin(), msg_text.end(), termination_rgx)) {
+            std::regex_search(msg_text, match, ID_regex);
+            downloaded_msgs++;
 
-            /** Odmazeme 3 posledne znaky **/
-            if (std::regex_search(msg_text.begin(), msg_text.end(), termination_rgx)) {
-                std::regex_search(msg_text, match, ID_regex);
-                downloaded_msgs++;
-
-             /** Skontrolujeme, ci uz sprava existuje **/
-                if (this->get_flag(NEW_FLAG) == true)
+            /** Skontrolujeme, ci uz sprava existuje **/
+            if (this->get_flag(NEW_FLAG) == true)
+            {
+                if (this->msgID_lookup(match.str()) == true)
                 {
-                    if (this->msgID_lookup(match.str()) == true)
-                    {
-                        std::cerr << "NESTAHUJEM" << std::endl;
-                        downloaded_msgs--;
-                        break;
-                    }
+                    std::cerr << "NESTAHUJEM" << std::endl;
+                    downloaded_msgs--;
+                    break;
                 }
-
-                if (this->msgID_lookup(match.str()) == false)
-                {
-                    std::cerr << "NOT FOUND: " << match.str() << std::endl;
-                    add_ID(match.str());
-                }
-
-                /** odmazeme ok riadok **/
-                if (std::regex_search(msg_text.begin(), msg_text.end(), ok_rgx))
-                {
-                    msg_text = std::regex_replace(msg_text, ok_rgx, "");
-                }
-                msg_text.erase(msg_text.length() - 3, 3);
-                flush_recv_buffer();
-                break;
             }
 
-            this->flush_recv_buffer();
-        }
+            if (this->msgID_lookup(match.str()) == false)
+            {
+                std::cerr << "NOT FOUND: " << match.str() << std::endl;
+                add_ID(match.str());
+            }
 
-        /** Zapis do suboru **/
-        if (std::regex_search(msg_text.begin(), msg_text.end(), dotByteStuff_rgx))
-        {
-            std::string replaced_text = std::regex_replace(msg_text, dotByteStuff_rgx, "\r\n.");
-            create_mail_file(this->get_out_dir(), replaced_text, msg_id);
-            msg_text.clear();
-        } else {
-            create_mail_file(this->get_out_dir(), msg_text, msg_id);
-            msg_text.clear();
+            /** odmazeme ok riadok **/
+            if (std::regex_search(msg_text.begin(), msg_text.end(), ok_rgx))
+            {
+                msg_text = std::regex_replace(msg_text, ok_rgx, "");
+            }
+            msg_text.erase(msg_text.length() - 3, 3);
+            flush_recv_buffer();
+            break;
         }
-
-        /** Zmazanie spravy zo servera **/
-        if (this->get_flag(DELETE_FLAG) == true)
-        {
-            send_buffer_length = this->set_send_buffer("DELE " + std::to_string(msg_id) + "\r\n");
-            BIO_write(this->get_handler_file_descriptor(), (const void *) send_buffer, send_buffer_length);
-            this->flush_recv_buffer();
-        }
+        this->flush_recv_buffer();
     }
 
-    std::cout << "Downloaded " << downloaded_msgs << " messages." << std::endl;
-    flush_recv_buffer();
-    return 0;
+    /** Zapis do suboru **/
+    if (std::regex_search(msg_text.begin(), msg_text.end(), dotByteStuff_rgx))
+    {
+        std::string replaced_text = std::regex_replace(msg_text, dotByteStuff_rgx, "\r\n.");
+        create_mail_file(this->get_out_dir(), replaced_text, emails_n);
+        msg_text.clear();
+    } else {
+        create_mail_file(this->get_out_dir(), msg_text, emails_n);
+        msg_text.clear();
+    }
+
+    /** Zmazanie spravy zo servera **/
+    if (this->get_flag(DELETE_FLAG) == true)
+    {
+        send_buffer_length = this->set_send_buffer("DELE " + std::to_string(msg_id) + "\r\n");
+        BIO_write(this->get_handler_file_descriptor(), (const void *) send_buffer, send_buffer_length);
+        this->flush_recv_buffer();
+    }
+
+    return downloaded_msgs;
+
 }
-
-int POP3_handler::msg_parser()
-{
-
-}
-
 bool POP3_handler::msgID_lookup(std::string id)
 {
     //std::cerr << "id_lookup: " << id << std::endl;f
@@ -505,6 +490,33 @@ bool POP3_handler::msgID_lookup(std::string id)
     ID_file.close();
     return ID_found;
 }
+void POP3_handler::load_certs(SSL_CTX *ctx) {
+    if (this->get_flag(CERT_LOCATION_FLAG) == true) {
+       // verify_path(this->get_cert_path(), 'C');
 
+        if (!SSL_CTX_load_verify_locations(ctx, NULL, this->get_cert_path().c_str()))
+        {
+            std::cerr << "bio.h: FAILED LOADING CERT FOLDER" << std::endl;
+            exit(-1);
+        }
+    }
+
+    if (this->get_flag(CERT_FLAG) == true)
+    {
+        std::cerr << this->get_cert_file() << std:: endl;
+        //verify_path(this->get_cert_file(), 'c');
+        if (!SSL_CTX_load_verify_locations(ctx, this->get_cert_file().c_str(), NULL))
+        {
+            std::cerr << "bio.h: FAILED LOADING CERT FILE" << std::endl;
+            exit(-1);
+        }
+    }
+
+    if (this->get_flag(CERT_FLAG) == false && this->get_flag(CERT_LOCATION_FLAG) == false)
+    {
+        std::cerr << "DEFAULT CERTS SET" << std::endl;
+        SSL_CTX_set_default_verify_paths(ctx);
+    }
+}
 
 
