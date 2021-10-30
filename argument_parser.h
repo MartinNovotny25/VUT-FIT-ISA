@@ -1,6 +1,6 @@
-//
-// Created by dekker on 03.10.21.
-//
+// argument_parser.h
+// Created by Martin Novotny Mlinarcsik (xnovot1r) on 03.10.21.
+// ISA 2021/2022 project - POP3 client
 
 #ifndef POP3CL_ARGUMENT_PARSER_H
 #define POP3CL_ARGUMENT_PARSER_H

@@ -1,32 +1,16 @@
-#include <iostream>
-#include <fstream>
+// main.cpp
+// Created by Martin Novotny Mlinarcsik (xnovot1r) on 03.10.21.
+// ISA 2021/2022 project - POP3 client
 
-#include <unistd.h>
-#include <stdio.h>
+#include <iostream>
 #include <stdlib.h>
 #include <string.h>
-
-
-#include <netdb.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/bio.h>
-
 #include "pop3_handler.h"
 #include "argument_parser.h"
 
-#include <experimental/filesystem>
-#include <iostream>
-#include <fstream>
-
-
-
-/** PORT 110, NAME pop3.centrum.sk, IP 46.255.231.11 **/
 
 int main(int argc, char *argv[]) {
 
@@ -45,14 +29,10 @@ int main(int argc, char *argv[]) {
     }
 
     create_mail_ID_file();
+    //startup_ID_check(popcl->get_out_dir());
 
     /** OPEN SSL **/
     if (popcl->get_flag(T_FLAG) == true) {
-        if (popcl->get_flag(PORT_FLAG) == false)
-        {
-            /** Ak nie je zadany port, pripajame sa na 995 **/
-            popcl->set_port("995");
-        }
         if (popcl->establish_ssl_connection() != 0) {
             std::cerr << "Secure Connection not established, exiting" << std::endl;
             exit(1);

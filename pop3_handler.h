@@ -1,6 +1,6 @@
-//
-// Created by Martin Novotny Mlinarcsik on 03.10.21.
-//
+// pop3_handler.h
+// Created by Martin Novotny Mlinarcsik (xnovot1r) on 03.10.21.
+// ISA 2021/2022 project - POP3 client
 
 
 #ifndef POP3_CLIENT_POP3_HANDLER_H

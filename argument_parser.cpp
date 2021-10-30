@@ -1,6 +1,6 @@
-//
-// Created by dekker on 03.10.21.
-//
+// argument_parser.cpp
+// Created by Martin Novotny Mlinarcsik (xnovot1r) on 03.10.21.
+// ISA 2021/2022 project - POP3 client
 
 #include "argument_parser.h"
 #include "file_parser.h"
@@ -195,6 +195,18 @@ int arg_parse(int argc, char *argv[], POP3_handler* pop3_client) {
             std::cerr << "Pouzitie -c/-C je mozne iba s parametrami -S/-T" << std::endl;
             exit(-1);
         }
+    }
+
+    if (pop3_client->get_flag(AUTH_FILE_FLAG) == false || pop3_client->get_flag(OUT_DIR_FLAG) == false)
+    {
+        std::cerr << "Chybajuci -a/-o parameter" << std::endl;
+        exit(-1);
+    }
+
+    if (pop3_client->get_flag(ADDR_FLAG) == false)
+    {
+        std::cerr << "Chybajuca adresa serveru" << std::endl;
+        exit(-1);
     }
 
     return 0;

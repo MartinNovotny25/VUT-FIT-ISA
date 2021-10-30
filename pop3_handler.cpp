@@ -1,8 +1,6 @@
-//
-// Created by dekker on 03.10.21.
-//
-
-/** ZMENIT exit v set_flag a get_flag **/
+// pop3_handler.cpp
+// Created by Martin Novotny Mlinarcsik (xnovot1r) on 03.10.21.
+// ISA 2021/2022 project - POP3 client
 
 #include <string.h>
 #include <iostream>
@@ -10,10 +8,8 @@
 #include <unistd.h>
 #include <fstream>
 #include <regex>
-#include <experimental/filesystem>
 
 #define PRINT(text) std::cout << text << std::endl
-
 
 /** OPEN SSH HEADERS **/
 #include <openssl/ssl.h>
@@ -98,14 +94,9 @@ void POP3_handler::set_flag(int in_flag){
             break;
         default:
             std::cerr << "POP3_handler::set_flag() error" << std::endl;
-            exit(69);
+            exit(-1);
     }
 }
-/*int POP3_handler::set_file_descriptor() {
-    handler_file_descriptor = socket(AF_INET, SOCK_STREAM, 0);
-    return handler_file_descriptor;
-}*/
-
 /** GETTERS (NISHINOYAs) **/
 std::string POP3_handler::get_address() {
     return address;
@@ -172,17 +163,21 @@ void POP3_handler::flush_recv_buffer(){
 
 int POP3_handler::establish_connection()
 {
+    if (this->get_flag(PORT_FLAG) == false)
+    {
+        this->set_port("110");
+    }
+
     /** Pridat funckionalitu ak sa nezada port **/
     std::string connection_string = this->get_address() + ":" + this->get_port();
     const char* connection_char_array = connection_string.c_str();
     this->pop3_bio = BIO_new_connect(connection_char_array);
+
     if (this->get_handler_file_descriptor() == nullptr)
     {
             std::cout << "bio.h: Socket not created" << std::endl;
             return -1;
     }
-
-    //std::cout << "bio.h: Socket created" << std::endl;
 
     if (BIO_do_connect(this->get_handler_file_descriptor()) <= 0)
     {
@@ -190,40 +185,39 @@ int POP3_handler::establish_connection()
          return -1;
     }
 
-    std::cout << "bio.h: Connection created" << std::endl;
+    //std::cout << "bio.h: Connection created" << std::endl;
 
-    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
-    std::cout << this->read_recv_buffer() << std::endl;
-
-    sleep(5);
+    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
+    //std::cout << this->read_recv_buffer() << std::endl;
 
     this->authenticate();
 
     BIO_free_all(pop3_bio);
     return 0;
-
 }
 
 int POP3_handler::establish_ssl_connection()
 {
     SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
     SSL *ssl;
+    this->pop3_bio = BIO_new_ssl_connect(ctx);
+    BIO_get_ssl(pop3_bio, &ssl);
+    SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
 
+    if (this->get_flag(PORT_FLAG) == false)
+    {
+        this->set_port("995");
+    }
 
-   this->pop3_bio = BIO_new_ssl_connect(ctx);
-   BIO_get_ssl(pop3_bio, &ssl);
-   SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
-
-   std::string hostname_port = this->get_address() + ":" + this->get_port();
-//   std::cerr << hostname_port<< std::endl;
+    std::string hostname_port = this->get_address() + ":" + this->get_port();
     this->load_certs(ctx);
 
-   BIO_set_conn_hostname(pop3_bio, hostname_port.c_str());
-   if (BIO_do_connect(pop3_bio) <= 0)
-   {
-       std::cerr << "bio.h: DO_CONNECT FAILED" << std::endl;
-       exit(-1);
-   }
+    BIO_set_conn_hostname(pop3_bio, hostname_port.c_str());
+    if (BIO_do_connect(pop3_bio) <= 0)
+    {
+        std::cerr << "bio.h: DO_CONNECT FAILED" << std::endl;
+        exit(-1);
+    }
 
     if(SSL_get_verify_result(ssl) != X509_V_OK)
     {
@@ -231,10 +225,8 @@ int POP3_handler::establish_ssl_connection()
         exit(-1);
     }
 
-    //std::cout << "bio.h: CONNECTED AND CERT VALID" << std::endl;
-
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 1024);
-    std::cout << this->read_recv_buffer() << std::endl;
+    //std::cout << this->read_recv_buffer() << std::endl;
     this->authenticate();
 
     SSL_CTX_free(ctx);
@@ -248,13 +240,16 @@ int POP3_handler::establish_tls_connection()
     const char* connection_char_array = connection_string.c_str();
     this->pop3_bio = BIO_new_connect(connection_char_array);
 
-    if (this->get_handler_file_descriptor() == nullptr)
+    if (this->get_flag(PORT_FLAG) == false)
     {
-        std::cout << "bio.h: Socket not created" << std::endl;
-        return -1;
+        this->set_port("110");
     }
 
-    //std::cout << "bio.h: Socket created" << std::endl;
+    if (this->get_handler_file_descriptor() == nullptr)
+    {
+        std::cerr << "bio.h: Socket not created" << std::endl;
+        return -1;
+    }
 
     if (BIO_do_connect(this->get_handler_file_descriptor()) <= 0)
     {
@@ -262,21 +257,19 @@ int POP3_handler::establish_tls_connection()
         return -1;
     }
 
-
     memset(recv_buffer, '\0', strlen(recv_buffer));
-    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
+    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
     std::cout << this->read_recv_buffer() << std::endl;
     this->flush_recv_buffer();
 
     /** SEND STLS COMMAND **/
     send_buffer_length = this->set_send_buffer("STLS\r\n");
     BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
-    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
+    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
 
     std::cout << this->read_recv_buffer() << std::endl;
     this->flush_recv_buffer();
 
-    std::cout << "bio.h: Connection created" << std::endl;
     BIO* ret = NULL, *ssl = NULL;
 
     SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
@@ -319,21 +312,21 @@ int POP3_handler::authenticate()
     send_buffer_length = this->set_send_buffer("USER " + username + "\r\n");
 
     BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
-    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
-    std::cout << this->read_recv_buffer();
+    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
+    //std::cout << this->read_recv_buffer();
     this->flush_recv_buffer();
 
     send_buffer_length = this->set_send_buffer("PASS " + password + "\r\n");
 
     BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
-    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
-    std::cout << this->read_recv_buffer();
+    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
+    //std::cout << this->read_recv_buffer();
     this->flush_recv_buffer();
 
     send_buffer_length = this->set_send_buffer("STAT\r\n");
 
     BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
-    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
+    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
     //std::cout << this->read_recv_buffer();
 
     /** Ziskanie poctu mailov **/
@@ -356,8 +349,8 @@ int POP3_handler::authenticate()
     send_buffer_length = this->set_send_buffer("QUIT\r\n");
 
     BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
-    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 50);
-    std::cout << this->read_recv_buffer();
+    BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
+    //std::cout << this->read_recv_buffer();
     this->flush_recv_buffer();
 
 
@@ -417,7 +410,6 @@ int POP3_handler::msg_parser(int msg_id)
             {
                 if (this->msgID_lookup(match.str()) == true)
                 {
-                    std::cerr << "NESTAHUJEM" << std::endl;
                     downloaded_msgs--;
                     break;
                 }
@@ -425,7 +417,6 @@ int POP3_handler::msg_parser(int msg_id)
 
             if (this->msgID_lookup(match.str()) == false)
             {
-                std::cerr << "NOT FOUND: " << match.str() << std::endl;
                 add_ID(match.str());
             }
 
@@ -461,12 +452,9 @@ int POP3_handler::msg_parser(int msg_id)
     }
 
     return downloaded_msgs;
-
 }
 bool POP3_handler::msgID_lookup(std::string id)
 {
-    //std::cerr << "id_lookup: " << id << std::endl;f
-
     bool ID_found = false;
     std::ifstream ID_file("msg_IDs.txt");
     std::regex plus_regex ("\\+");
@@ -482,7 +470,6 @@ bool POP3_handler::msgID_lookup(std::string id)
     {
         if (std::regex_search(line, msg_ID_regex) == true)
         {
-           // std::cout << "FOUND: " << id << std::endl;
             ID_found = true;
             break;
         }
@@ -492,7 +479,7 @@ bool POP3_handler::msgID_lookup(std::string id)
 }
 void POP3_handler::load_certs(SSL_CTX *ctx) {
     if (this->get_flag(CERT_LOCATION_FLAG) == true) {
-       // verify_path(this->get_cert_path(), 'C');
+       verify_path(this->get_cert_path(), 'C');
 
         if (!SSL_CTX_load_verify_locations(ctx, NULL, this->get_cert_path().c_str()))
         {
@@ -504,7 +491,7 @@ void POP3_handler::load_certs(SSL_CTX *ctx) {
     if (this->get_flag(CERT_FLAG) == true)
     {
         std::cerr << this->get_cert_file() << std:: endl;
-        //verify_path(this->get_cert_file(), 'c');
+        verify_path(this->get_cert_file(), 'c');
         if (!SSL_CTX_load_verify_locations(ctx, this->get_cert_file().c_str(), NULL))
         {
             std::cerr << "bio.h: FAILED LOADING CERT FILE" << std::endl;
@@ -514,7 +501,6 @@ void POP3_handler::load_certs(SSL_CTX *ctx) {
 
     if (this->get_flag(CERT_FLAG) == false && this->get_flag(CERT_LOCATION_FLAG) == false)
     {
-        std::cerr << "DEFAULT CERTS SET" << std::endl;
         SSL_CTX_set_default_verify_paths(ctx);
     }
 }
