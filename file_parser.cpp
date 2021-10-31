@@ -26,25 +26,20 @@ int verify_path(std::string argPath, int type) {
 
     if (type == 'o') {
         if (fs::exists(pathToCheck) == 0 || fs::is_directory(pathToCheck) == 0) {
-           // std::cerr << "Directory does not exist, creating" << std::endl;
             fs::create_directory(pathToCheck);
         } else {
-           // std::cerr << "Directory existing" << std::endl;
         }
     } else if (type == 'c') {
         if (fs::exists(pathToCheck) == 0 && fs::is_directory(pathToCheck) == 0) {
-            std::cerr << "Invalid certification file, exiting" << std::endl;
             exit(1);
         }
     } else if (type == 'C') {
         if (fs::exists(pathToCheck) == 0 || fs::is_directory(pathToCheck) == 0) {
-            std::cerr << "Invalid certification directory, exiting" << std::endl;
             exit(1);
         }
     } else if (type == 'a')
     {
         if (fs::exists(pathToCheck) == 0) {
-            std::cerr << "Invalid auth directory, exiting" << std::endl;
             exit(1);
         }
     }
@@ -67,7 +62,6 @@ int create_mail_file(std::string out_dir, std::string msg_text, int msg_num)
     return 0;
 }
 
-/* kod prevzaty z https://stackoverflow.com/questions/41304891/how-to-count-the-number-of-files-in-a-directory-using-standard/41305019 */
 /*
  * Counts number of emails in out directory
  */

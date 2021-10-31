@@ -31,7 +31,6 @@ int main(int argc, char *argv[]) {
     /* Parses arguments */
     int returnCode = arg_parse(argc, argv, popcl);
     if (returnCode == -1) {
-        std::cerr << "BAD OPTION" << std::endl;
         return 1;
     }
 
@@ -42,7 +41,6 @@ int main(int argc, char *argv[]) {
     /* SSL -T*/
     if (popcl->get_flag(T_FLAG) == true) {
         if (popcl->establish_ssl_connection() != 0) {
-            std::cerr << "Secure Connection not established, exiting" << std::endl;
             exit(1);
         }
 
@@ -50,7 +48,6 @@ int main(int argc, char *argv[]) {
     } else if(popcl->get_flag(S_FLAG) == true)
     {
         if (popcl->establish_tls_connection() != 0) {
-            std::cerr << "TLS connection not established, exiting" << std::endl;
             exit(1);
         }
     }
@@ -58,7 +55,6 @@ int main(int argc, char *argv[]) {
     else {
 
         if (popcl->establish_connection() != 0) {
-            std::cerr << "Unsecure connection not established, exiting" << std::endl;
             exit(1);
         }
     }

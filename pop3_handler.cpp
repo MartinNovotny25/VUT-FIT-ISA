@@ -184,13 +184,11 @@ int POP3_handler::establish_connection()
 
     if (this->get_handler_file_descriptor() == nullptr)
     {
-            std::cerr << "bio.h: Socket not created" << std::endl;
             return -1;
     }
 
     if (BIO_do_connect(this->get_handler_file_descriptor()) <= 0)
     {
-         std::cerr << "bio.h: Connection failed" << std::endl;
          return -1;
     }
 
@@ -198,7 +196,6 @@ int POP3_handler::establish_connection()
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
     if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
     {
-        std::cerr << "-ERR start, exiting" << std::endl;
         exit(-2);
     }
 
@@ -236,20 +233,17 @@ int POP3_handler::establish_ssl_connection()
     BIO_set_conn_hostname(pop3_bio, hostname_port.c_str());
     if (BIO_do_connect(pop3_bio) <= 0)
     {
-        std::cerr << "bio.h: DO_CONNECT FAILED" << std::endl;
         exit(-1);
     }
 
     if(SSL_get_verify_result(ssl) != X509_V_OK)
     {
-        std::cerr << "bio.h: CERT NOT VALID" << std::endl;
         exit(-1);
     }
 
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 1024);
     if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
     {
-        std::cerr << "-ERR start, exiting" << std::endl;
         exit(-2);
     }
     this->authenticate();
@@ -281,13 +275,11 @@ int POP3_handler::establish_tls_connection()
 
     if (this->get_handler_file_descriptor() == nullptr)
     {
-        std::cerr << "bio.h: Socket not created" << std::endl;
         return -1;
     }
 
     if (BIO_do_connect(this->get_handler_file_descriptor()) <= 0)
     {
-        std::cerr << "bio.h: Connection failed" << std::endl;
         return -1;
     }
 
@@ -295,7 +287,6 @@ int POP3_handler::establish_tls_connection()
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
     if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
     {
-        std::cerr << "-ERR start, exiting" << std::endl;
         exit(-2);
     }
     this->flush_recv_buffer();
@@ -306,7 +297,6 @@ int POP3_handler::establish_tls_connection()
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
     if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
     {
-        std::cerr << "-ERR STLS, exiting" << std::endl;
         exit(-2);
     }
 
@@ -322,13 +312,11 @@ int POP3_handler::establish_tls_connection()
     /* Promote non-secured connection to secured */
     if ((ssl = BIO_new_ssl(ctx, 1)) == NULL)
     {
-        std::cerr << "bio_new_ssl ERROR" << std::endl;
         exit(-2);
     }
 
     if ((ret = BIO_push(ssl, this->pop3_bio)) == NULL)
     {
-        std::cerr << "bio_push ERROR" << std::endl;
         exit(-2);
     }
 
@@ -372,7 +360,6 @@ int POP3_handler::authenticate()
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
     if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
     {
-        std::cerr << "-ERR USER, exiting" << std::endl;
         exit(-2);
     }
 
@@ -384,7 +371,6 @@ int POP3_handler::authenticate()
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
     if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
     {
-        std::cerr << "-ERR PASS, exiting" << std::endl;
         exit(-2);
     }
     this->flush_recv_buffer();
@@ -395,7 +381,6 @@ int POP3_handler::authenticate()
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
     if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
     {
-        std::cerr << "-ERR STAT, exiting" << std::endl;
         exit(-2);
     }
 
@@ -422,7 +407,6 @@ int POP3_handler::authenticate()
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
     if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
     {
-        std::cerr << "-ERR QUIT, exiting" << std::endl;
         exit(-2);
     }
     this->flush_recv_buffer();
@@ -449,7 +433,6 @@ int POP3_handler::receive(int msg_count)
         BIO_write(this->get_handler_file_descriptor(), (const void *) send_buffer, send_buffer_length);
         if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
         {
-            std::cerr << "-ERR RETR, exiting" << std::endl;
             break;
         }
         this->flush_recv_buffer();
@@ -482,7 +465,7 @@ int POP3_handler::msg_parser(int msg_id)
     static std::regex ok_rgx("\\+OK (.*)\r\n");
     static std::regex err_regex("-ERR .*\r\n");
 
-    /** Zistime pocet emailov, ktore su aktualne v zadanom adresari **/
+    /* Finds out, how many emails we have in out dir */
     int emails_n = count_emails(this->out_dir);
     emails_n++;
 
@@ -544,7 +527,6 @@ int POP3_handler::msg_parser(int msg_id)
         BIO_write(this->get_handler_file_descriptor(), (const void *) send_buffer, send_buffer_length);
         if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
         {
-            std::cerr << "-ERR DELE, exiting" << std::endl;
             exit(-2);
         }
         this->flush_recv_buffer();
@@ -593,7 +575,6 @@ void POP3_handler::load_certs(SSL_CTX *ctx) {
 
         if (!SSL_CTX_load_verify_locations(ctx, NULL, this->get_cert_path().c_str()))
         {
-            std::cerr << "bio.h: FAILED LOADING CERT FOLDER" << std::endl;
             exit(-1);
         }
     }
@@ -604,7 +585,6 @@ void POP3_handler::load_certs(SSL_CTX *ctx) {
         verify_path(this->get_cert_file(), 'c');
         if (!SSL_CTX_load_verify_locations(ctx, this->get_cert_file().c_str(), NULL))
         {
-            std::cerr << "bio.h: FAILED LOADING CERT FILE" << std::endl;
             exit(-1);
         }
     }
