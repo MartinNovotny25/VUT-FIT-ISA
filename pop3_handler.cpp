@@ -1,6 +1,10 @@
-// pop3_handler.cpp
-// Created by Martin Novotny Mlinarcsik (xnovot1r) on 03.10.21.
-// ISA 2021/2022 project - POP3 client
+/** pop3_handler.cpp
+* Created by Martin Novotny Mlinarcsik (xnovot1r) on 03.10.21.
+* ISA 2021/2022 project - POP3 client
+ *
+* @file pop3_handler class methods and variables.
+* @author Martin Novotny Mlinarcsik <xnovot1r@stud.fit.vutbr.cz>
+*/
 
 #include <string.h>
 #include <iostream>
@@ -17,6 +21,7 @@
 
 #include "pop3_handler.h"
 
+/* Constructor and class variables */
 POP3_handler::POP3_handler() {
     address = "";
     port = "";
@@ -36,7 +41,7 @@ POP3_handler::POP3_handler() {
     auth_fileFlag = false;
     out_dirFlag = false;
 }
-/** SETTERS (KAGEYAMAs) **/
+/* SETTERS (KAGEYAMAs) */
 void POP3_handler::set_address(std::string arg_address) {
     address = std::move(arg_address);
 }
@@ -93,11 +98,10 @@ void POP3_handler::set_flag(int in_flag){
             out_dirFlag = true;
             break;
         default:
-            std::cerr << "POP3_handler::set_flag() error" << std::endl;
             exit(-1);
     }
 }
-/** GETTERS (NISHINOYAs) **/
+/* GETTERS (NISHINOYAs) */
 std::string POP3_handler::get_address() {
     return address;
 }
@@ -143,39 +147,44 @@ bool POP3_handler::get_flag(int out_flag){
         case OUT_DIR_FLAG:
             return out_dirFlag;
         default:
-            std::cerr << "POP3_handler:get_flag() error" << std::endl;
-            exit(420);
+            exit(-1);
     }
 }
 
-/** HELPER METHODS **/
+/* HELPER METHODS */
+/* Reads recv_buffer and return its value */
 std::string POP3_handler::read_recv_buffer() {
     std::string string_buffer;
     string_buffer.append(recv_buffer);
     return string_buffer;
 }
+/* Sets the entire buffer to '\0' */
 void POP3_handler::flush_recv_buffer(){
-    //std::cout << std::endl << "****************** FLUSHING CONTENTS ***********************" << std::endl;
     if (strlen(recv_buffer) > 0) {
         memset(recv_buffer, '\0', sizeof(recv_buffer));
     }
 }
-
+/* First, we designate a default port, if not given in input parameters.
+ * Using OpenSSL BIO functions, we create a non-secured connection to
+ * server. Program receives confirmation message and proceeds
+ * to verify user.
+ */
 int POP3_handler::establish_connection()
 {
+
     if (this->get_flag(PORT_FLAG) == false)
     {
         this->set_port("110");
     }
 
-    /** Pridat funckionalitu ak sa nezada port **/
     std::string connection_string = this->get_address() + ":" + this->get_port();
     const char* connection_char_array = connection_string.c_str();
     this->pop3_bio = BIO_new_connect(connection_char_array);
+    static std::regex err_regex("-ERR .*\r\n");
 
     if (this->get_handler_file_descriptor() == nullptr)
     {
-            std::cout << "bio.h: Socket not created" << std::endl;
+            std::cerr << "bio.h: Socket not created" << std::endl;
             return -1;
     }
 
@@ -185,10 +194,13 @@ int POP3_handler::establish_connection()
          return -1;
     }
 
-    //std::cout << "bio.h: Connection created" << std::endl;
 
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
-    //std::cout << this->read_recv_buffer() << std::endl;
+    if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
+    {
+        std::cerr << "-ERR start, exiting" << std::endl;
+        exit(-2);
+    }
 
     this->authenticate();
 
@@ -196,9 +208,18 @@ int POP3_handler::establish_connection()
     return 0;
 }
 
+/* First, we designate a default port, if not given in input parameters.
+ * Using OpenSSL BIO functions, we create a secured connection to
+ * server. We load security certificates and after connection, verify
+ * certificates presented by server. Program receives confirmation message
+ * and proceeds to verify user.
+ */
+
 int POP3_handler::establish_ssl_connection()
 {
-    SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
+    static std::regex err_regex("-ERR .*\r\n");
+
+    SSL_CTX *ctx = SSL_CTX_new(TLS_method());
     SSL *ssl;
     this->pop3_bio = BIO_new_ssl_connect(ctx);
     BIO_get_ssl(pop3_bio, &ssl);
@@ -226,15 +247,28 @@ int POP3_handler::establish_ssl_connection()
     }
 
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 1024);
-    //std::cout << this->read_recv_buffer() << std::endl;
+    if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
+    {
+        std::cerr << "-ERR start, exiting" << std::endl;
+        exit(-2);
+    }
     this->authenticate();
 
     SSL_CTX_free(ctx);
     return 0;
 }
+
+/* First, we designate a default port, if not given in input parameters.
+ * Using OpenSSL BIO functions, we first create a non-secured connection to
+ * server, which we afterwards promote to secured using STLS command.
+ * We load security certificates and after connection, verify
+ * certificates presented by server. Program receives confirmation message
+ * and proceeds to verify user.
+ */
 int POP3_handler::establish_tls_connection()
 {
-    /** Pridat funckionalitu ak sa nezada port **/
+    static std::regex err_regex("-ERR .*\r\n");
+
     int send_buffer_length;
     std::string connection_string = this->get_address() + ":" + this->get_port();
     const char* connection_char_array = connection_string.c_str();
@@ -259,23 +293,33 @@ int POP3_handler::establish_tls_connection()
 
     memset(recv_buffer, '\0', strlen(recv_buffer));
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
-    std::cout << this->read_recv_buffer() << std::endl;
+    if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
+    {
+        std::cerr << "-ERR start, exiting" << std::endl;
+        exit(-2);
+    }
     this->flush_recv_buffer();
 
-    /** SEND STLS COMMAND **/
+    /* SEND STLS MESSAGE */
     send_buffer_length = this->set_send_buffer("STLS\r\n");
     BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
+    if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
+    {
+        std::cerr << "-ERR STLS, exiting" << std::endl;
+        exit(-2);
+    }
 
-    std::cout << this->read_recv_buffer() << std::endl;
     this->flush_recv_buffer();
 
     BIO* ret = NULL, *ssl = NULL;
 
-    SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
+    /* Create context */
+    SSL_CTX *ctx = SSL_CTX_new(TLS_method());
 
     this->load_certs(ctx);
 
+    /* Promote non-secured connection to secured */
     if ((ssl = BIO_new_ssl(ctx, 1)) == NULL)
     {
         std::cerr << "bio_new_ssl ERROR" << std::endl;
@@ -294,6 +338,14 @@ int POP3_handler::establish_tls_connection()
     return 0;
 }
 
+/* First, we load username and password from authentication file.
+ * Using OpenSSL BIO functions, we communicate with POP3 server
+ * and using USER and PASS commands, we verify the user and proceed to
+ * receive the message. After receiving designated number of messages,
+ * programs sends QUIT message.
+ */
+
+
 int POP3_handler::authenticate()
 {
     std::string username;
@@ -302,6 +354,7 @@ int POP3_handler::authenticate()
     int msg_count;
     int send_buffer_length;
     std::string msg_text;
+    static std::regex err_regex("-ERR .*\r\n");
 
     memset(recv_buffer, '\0', strlen(recv_buffer)); // Vynulujeme buffer
 
@@ -309,27 +362,44 @@ int POP3_handler::authenticate()
     getline(authentication_file, username);
     getline(authentication_file, password);
 
+    /* Delete "password =" and "username =" */
+    username.erase(0, 11);
+    password.erase(0, 11);
+
     send_buffer_length = this->set_send_buffer("USER " + username + "\r\n");
 
     BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
-    //std::cout << this->read_recv_buffer();
+    if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
+    {
+        std::cerr << "-ERR USER, exiting" << std::endl;
+        exit(-2);
+    }
+
     this->flush_recv_buffer();
 
     send_buffer_length = this->set_send_buffer("PASS " + password + "\r\n");
 
     BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
-    //std::cout << this->read_recv_buffer();
+    if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
+    {
+        std::cerr << "-ERR PASS, exiting" << std::endl;
+        exit(-2);
+    }
     this->flush_recv_buffer();
 
     send_buffer_length = this->set_send_buffer("STAT\r\n");
 
     BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
-    //std::cout << this->read_recv_buffer();
+    if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
+    {
+        std::cerr << "-ERR STAT, exiting" << std::endl;
+        exit(-2);
+    }
 
-    /** Ziskanie poctu mailov **/
+    /* Calculate number of emails do download */
     char container[256];
     for(int i = 0; i < sizeof(recv_buffer); i++) {
         if(isdigit(recv_buffer[i+4]) == true)
@@ -350,28 +420,40 @@ int POP3_handler::authenticate()
 
     BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
     BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
-    //std::cout << this->read_recv_buffer();
+    if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
+    {
+        std::cerr << "-ERR QUIT, exiting" << std::endl;
+        exit(-2);
+    }
     this->flush_recv_buffer();
-
 
     authentication_file.close();
     return 0;
 }
+
+/*
+ * In for loop, we send RETR messages according to number
+ * of emails program is to receive.
+ */
 int POP3_handler::receive(int msg_count)
 {
-    /** Download mailov **/
+    /* Download mailov */
     int send_buffer_length = 0;
     int downloaded_msgs = 0;
+    static std::regex err_regex("-ERR .*\r\n");
 
 
     for(int msg_id = 1; msg_id <= msg_count; ++msg_id)
     {
         send_buffer_length = this->set_send_buffer("RETR " + std::to_string(msg_id) + "\r\n");
         BIO_write(this->get_handler_file_descriptor(), (const void *) send_buffer, send_buffer_length);
+        if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
+        {
+            std::cerr << "-ERR RETR, exiting" << std::endl;
+            break;
+        }
         this->flush_recv_buffer();
-
         downloaded_msgs += msg_parser(msg_id);
-
     }
 
     std::cout << "Downloaded " << downloaded_msgs << " messages." << std::endl;
@@ -379,8 +461,16 @@ int POP3_handler::receive(int msg_count)
     return 0;
 }
 
+
+/* Function parses messages, removes +OK response, replaces any byte-stuffed
+ * '.' characters and removes termination octet. Afterwards, program creates
+ * new email text files, depending on if -n parameter was inputted.
+ * It also deletes downloaded messages from the server by sending
+ * DELE messages, depending on if -d parameter was inputted.
+ */
 int POP3_handler::msg_parser(int msg_id)
 {
+
     int send_buffer_length;
     int downloaded_msgs = 0;
     std::string msg_text;
@@ -390,6 +480,7 @@ int POP3_handler::msg_parser(int msg_id)
     static const std::regex termination_rgx ("\r\n\\.\r\n");
     static std::regex dotByteStuff_rgx ("\r\n\\.\\.");
     static std::regex ok_rgx("\\+OK (.*)\r\n");
+    static std::regex err_regex("-ERR .*\r\n");
 
     /** Zistime pocet emailov, ktore su aktualne v zadanom adresari **/
     int emails_n = count_emails(this->out_dir);
@@ -400,12 +491,12 @@ int POP3_handler::msg_parser(int msg_id)
         BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 1023);
         msg_text.append(this->recv_buffer);
 
-        /** Odmazeme 3 posledne znaky **/
+        /* Termination octet found */
         if (std::regex_search(msg_text.begin(), msg_text.end(), termination_rgx)) {
             std::regex_search(msg_text, match, ID_regex);
             downloaded_msgs++;
 
-            /** Skontrolujeme, ci uz sprava existuje **/
+            /* If -n is inputted, we check, if the file was already downloaded */
             if (this->get_flag(NEW_FLAG) == true)
             {
                 if (this->msgID_lookup(match.str()) == true)
@@ -415,16 +506,19 @@ int POP3_handler::msg_parser(int msg_id)
                 }
             }
 
+            /* If not, download */
             if (this->msgID_lookup(match.str()) == false)
             {
                 add_ID(match.str());
             }
 
-            /** odmazeme ok riadok **/
-            if (std::regex_search(msg_text.begin(), msg_text.end(), ok_rgx))
+            /* Removing +OK line */
+            if (std::regex_search(msg_text.begin(), msg_text.end(), ok_rgx, std::regex_constants::format_first_only))
             {
                 msg_text = std::regex_replace(msg_text, ok_rgx, "");
             }
+
+            /* Removing termination octet and CRLF */
             msg_text.erase(msg_text.length() - 3, 3);
             flush_recv_buffer();
             break;
@@ -432,7 +526,7 @@ int POP3_handler::msg_parser(int msg_id)
         this->flush_recv_buffer();
     }
 
-    /** Zapis do suboru **/
+    /* Writing msg body into files */
     if (std::regex_search(msg_text.begin(), msg_text.end(), dotByteStuff_rgx))
     {
         std::string replaced_text = std::regex_replace(msg_text, dotByteStuff_rgx, "\r\n.");
@@ -443,29 +537,41 @@ int POP3_handler::msg_parser(int msg_id)
         msg_text.clear();
     }
 
-    /** Zmazanie spravy zo servera **/
+    /* Deleting emails from pop3 server */
     if (this->get_flag(DELETE_FLAG) == true)
     {
         send_buffer_length = this->set_send_buffer("DELE " + std::to_string(msg_id) + "\r\n");
         BIO_write(this->get_handler_file_descriptor(), (const void *) send_buffer, send_buffer_length);
+        if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
+        {
+            std::cerr << "-ERR DELE, exiting" << std::endl;
+            exit(-2);
+        }
         this->flush_recv_buffer();
     }
 
     return downloaded_msgs;
 }
+
+/* Function finds message id in msg_IDs file. User case-insesitive
+ * regex.
+ */
 bool POP3_handler::msgID_lookup(std::string id)
 {
     bool ID_found = false;
     std::ifstream ID_file("msg_IDs.txt");
-    std::regex plus_regex ("\\+");
+    const static std::regex plus_regex ("\\+");
+
 
     if (std::regex_search(id, plus_regex) == true)
     {
         id = std::regex_replace(id, plus_regex, "\\+");
     }
 
+    PRINT(id);
     std::regex msg_ID_regex (id);
     std::string line;
+
     while (std::getline(ID_file, line))
     {
         if (std::regex_search(line, msg_ID_regex) == true)
@@ -477,6 +583,10 @@ bool POP3_handler::msgID_lookup(std::string id)
     ID_file.close();
     return ID_found;
 }
+
+/* Function loads security certificates depending on if -c/-C
+ * parameters were inputted.
+ */
 void POP3_handler::load_certs(SSL_CTX *ctx) {
     if (this->get_flag(CERT_LOCATION_FLAG) == true) {
        verify_path(this->get_cert_path(), 'C');

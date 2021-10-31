@@ -1,6 +1,12 @@
-// file_parser.cpp
-// Created by Martin Novotny Mlinarcsik (xnovot1r) on 03.10.21.
-// ISA 2021/2022 project - POP3 client
+/** file_parser.cpp
+* Created by Martin Novotny Mlinarcsik (xnovot1r) on 03.10.21.
+* ISA 2021/2022 project - POP3 client
+*
+* @file Functions  for handling files.
+* @author Martin Novotny Mlinarcsik <xnovot1r@stud.fit.vutbr.cz>
+*
+*
+*/
 
 #include "file_parser.h"
 #include <string.h>
@@ -11,6 +17,10 @@
 #include <regex>
 
 namespace fs = std::experimental::filesystem;
+
+/* Verify, if the path is valid and the file/folder exists and, depending on type,
+ * exits the program if the folder does not exist, or creates it.
+ */
 int verify_path(std::string argPath, int type) {
     fs::path pathToCheck(argPath);
 
@@ -24,23 +34,26 @@ int verify_path(std::string argPath, int type) {
     } else if (type == 'c') {
         if (fs::exists(pathToCheck) == 0 && fs::is_directory(pathToCheck) == 0) {
             std::cerr << "Invalid certification file, exiting" << std::endl;
-            exit(2);
+            exit(1);
         }
     } else if (type == 'C') {
         if (fs::exists(pathToCheck) == 0 || fs::is_directory(pathToCheck) == 0) {
             std::cerr << "Invalid certification directory, exiting" << std::endl;
-            exit(2);
+            exit(1);
         }
     } else if (type == 'a')
     {
         if (fs::exists(pathToCheck) == 0) {
             std::cerr << "Invalid auth directory, exiting" << std::endl;
-            exit(2);
+            exit(1);
         }
     }
     return 0;
 }
 
+/*
+ * Creates file to hold the message content.
+ */
 int create_mail_file(std::string out_dir, std::string msg_text, int msg_num)
 {
     std::string filename = "email_" + std::to_string(msg_num) + ".txt";
@@ -54,7 +67,10 @@ int create_mail_file(std::string out_dir, std::string msg_text, int msg_num)
     return 0;
 }
 
-/** kod prevzaty z https://stackoverflow.com/questions/41304891/how-to-count-the-number-of-files-in-a-directory-using-standard/41305019 **/
+/* kod prevzaty z https://stackoverflow.com/questions/41304891/how-to-count-the-number-of-files-in-a-directory-using-standard/41305019 */
+/*
+ * Counts number of emails in out directory
+ */
 int count_emails(std::string string_path)
 {
         fs::path path(string_path);
@@ -64,6 +80,7 @@ int count_emails(std::string string_path)
 
 }
 
+/* Creates ID file */
 int create_mail_ID_file()
 {
     if (fs::exists("msg_IDs.txt") == false) {
@@ -74,6 +91,7 @@ int create_mail_ID_file()
     return 0;
 }
 
+/* Adds ID to ID text file */
 int add_ID(std::string id)
 {
     std::ofstream file;
@@ -82,80 +100,3 @@ int add_ID(std::string id)
     file.close();
     return 0;
 }
-
-/*bool startup_ID_check(std::string path)
-{
-    bool found = false;
-    bool add_to_temp = true;
-
-    const fs::path out_dir(path);
-    std::string line, line_2, tmp_line;
-    std::smatch match;
-
-    std::regex current_email_regex;
-    std::regex general_email_regex("Message-Id: <.+@.+>", std::regex_constants::icase);
-    std::regex temp_line_regex;
-
-    std::ifstream id_file("msg_IDs.txt");
-    std::fstream temp("temp.txt");
-
-    for (auto const& email_iter: fs::directory_iterator{out_dir})
-    {
-        const fs::path& email_path = email_iter;
-        std::fstream email_file(email_path);
-
-        std::cerr << "CURRENT FILE: " << email_path << std::endl;
-
-        while(std::getline(email_file, line)) {
-            if (std::regex_search(line, match, general_email_regex))
-            {
-                current_email_regex.assign(match.str());
-                std::cerr << "CURRENT EMAIL REGEX: " << match.str() << std::endl;
-
-                while(std::getline(id_file, line_2))
-                {
-                    if (std::regex_search(line_2, current_email_regex))
-                    {
-                        std::cerr << "ID FOUND IN ID_FILE:  " << line_2 << std::endl;
-                        found = true;
-
-                        std::cerr << "IS LINE IN TMP?: ";
-                        while (std::getline(temp, tmp_line))
-                        {
-                            if (tmp_line.compare(line_2) == true)
-                            {
-                                std::cerr << "YES" << std::endl;
-                                add_to_temp = false;
-                            }
-                        }
-
-                        if (add_to_temp == true)
-                        {
-                            std::cerr << "NO, ADDING" << std::endl;
-                            temp << line_2 << "\r\n";
-                        }
-                        break;
-                    }
-                }
-
-                if (found == false)
-                {
-                    std::cerr << "ID NOT FOUND, REMOVING FROM MSG_IDs" << std::endl;
-                    temp << "" << "\r\n";
-                }
-            }
-
-            if (found == true)
-            {
-                std::cerr << "ID FOUND, NOT REMOVING FROM MSG_IDs" << std::endl;
-                break;
-            }
-        }
-    }
-
-
-    remove("msg_IDs.txt");
-    rename("tmp.txt", "msg_IDs.txt");
-
-    return found;
-}*/

@@ -1,10 +1,13 @@
-// argument_parser.cpp
-// Created by Martin Novotny Mlinarcsik (xnovot1r) on 03.10.21.
-// ISA 2021/2022 project - POP3 client
+/** argument_parser.cpp
+* Created by Martin Novotny Mlinarcsik (xnovot1r) on 03.10.21.
+* ISA 2021/2022 project - POP3 client
+*
+* @file Functions for argument parsing.
+* @author Martin Novotny Mlinarcsik <xnovot1r@stud.fit.vutbr.cz>
+*/
 
 #include "argument_parser.h"
 #include "file_parser.h"
-#include <unistd.h>
 
 #include <netdb.h>
 #include <sys/socket.h>
@@ -12,25 +15,13 @@
 #include <iostream>
 #include <arpa/inet.h>
 
-/** NEZABUDNUT NA IPv6 PODPORU **/
+/* Function parses arguments and calls according setter functions.
+ * Also further controls combination of arguments.
+ */
 
-
-int arg_parse(int argc, char *argv[], POP3_handler* pop3_client) {
-
-    struct addrinfo hints = {0};
-    struct in_addr inaddr = {0};
-
-    struct addrinfo *result;
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = 0;
-    hints.ai_protocol = 0;
+int arg_parse(int argc, char **argv, POP3_handler* pop3_client) {
     hostent *he;
-
-    int index;
     int tmp_int;
-
 
     for (int i = 1; i < argc; i++) {
 
@@ -67,7 +58,7 @@ int arg_parse(int argc, char *argv[], POP3_handler* pop3_client) {
         {
             if (pop3_client->get_flag(T_FLAG) == true)
             {
-                std::cout << "Redundantny -T option" << std::endl;
+                std::cerr << "Redundantny -T option" << std::endl;
                 return -1;
             } else
             {
@@ -76,7 +67,7 @@ int arg_parse(int argc, char *argv[], POP3_handler* pop3_client) {
         } else if (strcmp(argv[i], "-S") == 0)
         {
             if (pop3_client->get_flag(S_FLAG) == true) {
-                std::cout << "Redundantny -S option" << std::endl;
+                std::cerr << "Redundantny -S option" << std::endl;
                 return -1;
             }
             else
@@ -86,7 +77,7 @@ int arg_parse(int argc, char *argv[], POP3_handler* pop3_client) {
         } else if (strcmp(argv[i], "-c") == 0)
         {
             if (pop3_client->get_flag(CERT_FLAG) == true) {
-                std::cout << "Redundantny -c option" << std::endl;
+                std::cerr << "Redundantny -c option" << std::endl;
                 return -1;
             }
             else
@@ -99,7 +90,7 @@ int arg_parse(int argc, char *argv[], POP3_handler* pop3_client) {
         } else if (strcmp(argv[i], "-C") == 0)
         {
             if (pop3_client->get_flag(CERT_LOCATION_FLAG) == true) {
-                std::cout << "Redundantny -C option" << std::endl;
+                std::cerr << "Redundantny -C option" << std::endl;
                 return -1;
             }
             else
@@ -112,7 +103,7 @@ int arg_parse(int argc, char *argv[], POP3_handler* pop3_client) {
         } else if (strcmp(argv[i], "-d") == 0)
         {
             if (pop3_client->get_flag(DELETE_FLAG) == true) {
-                std::cout << "Redundantny -d option" << std::endl;
+                std::cerr << "Redundantny -d option" << std::endl;
                 return -1;
             }
             else
@@ -124,7 +115,7 @@ int arg_parse(int argc, char *argv[], POP3_handler* pop3_client) {
         else if (strcmp(argv[i], "-n") == 0)
         {
             if (pop3_client->get_flag(NEW_FLAG) == true) {
-                std::cout << "Redundantny -n option" << std::endl;
+                std::cerr << "Redundantny -n option" << std::endl;
                 return -1;
             }
             else
@@ -136,7 +127,7 @@ int arg_parse(int argc, char *argv[], POP3_handler* pop3_client) {
         else if (strcmp(argv[i], "-a") == 0)
         {
             if (pop3_client->get_flag(AUTH_FILE_FLAG) == true) {
-                std::cout << "Redundantny -a option" << std::endl;
+                std::cerr << "Redundantny -a option" << std::endl;
                 return -1;
             }
             else
@@ -149,7 +140,7 @@ int arg_parse(int argc, char *argv[], POP3_handler* pop3_client) {
         } else if (strcmp(argv[i], "-o") == 0)
         {
             if (pop3_client->get_flag(OUT_DIR_FLAG) == true) {
-                std::cout << "Redundantny -o option" << std::endl;
+                std::cerr << "Redundantny -o option" << std::endl;
                 return -1;
             }
             else
@@ -184,10 +175,9 @@ int arg_parse(int argc, char *argv[], POP3_handler* pop3_client) {
             std::cerr << "Unknown argument/Bad IP address" << std::endl;
             exit(-1);
         }
-
     }
 
-    /** Kontrola dalsej syntaxe a semantiky vstupnych argumentov **/
+    /* Further control of syntax and semantics of input arguments*/
     if (pop3_client->get_flag(CERT_FLAG) == true || pop3_client->get_flag(CERT_LOCATION_FLAG) == true)
     {
         if (pop3_client->get_flag(T_FLAG) == false && pop3_client->get_flag(S_FLAG) == false)
