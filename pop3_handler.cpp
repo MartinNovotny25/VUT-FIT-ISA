@@ -12,7 +12,6 @@
 #include <unistd.h>
 #include <fstream>
 #include <regex>
-
 #define PRINT(text) std::cout << text << std::endl
 
 /** OPEN SSH HEADERS **/
@@ -399,8 +398,26 @@ int POP3_handler::authenticate()
     const std::string msg_count_string(container);
     msg_count = strtol(msg_count_string.c_str(), nullptr, 10);
 
-    this->receive(msg_count);
+    /* If we have 0 emails, exit */
+    if (msg_count == 0)
+    {
+        send_buffer_length = this->set_send_buffer("QUIT\r\n");
 
+        BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
+        BIO_read(this->get_handler_file_descriptor(), this->recv_buffer, 60);
+        if (std::regex_search(this->read_recv_buffer(), err_regex) == true)
+        {
+            exit(-2);
+        }
+        this->flush_recv_buffer();
+
+        std::cout << "Downloaded 0 messages" << std::endl;
+        return 0;
+    }
+
+
+    /* If not, proceed to receive */
+    this->receive(msg_count);
     send_buffer_length = this->set_send_buffer("QUIT\r\n");
 
     BIO_write(this->get_handler_file_descriptor(), (const void*) send_buffer, send_buffer_length);
@@ -445,11 +462,14 @@ int POP3_handler::receive(int msg_count)
 }
 
 
-/* Function parses messages, removes +OK response, replaces any byte-stuffed
+/*
+ * Function parses messages, removes +OK response, replaces any byte-stuffed
  * '.' characters and removes termination octet. Afterwards, program creates
  * new email text files, depending on if -n parameter was inputted.
  * It also deletes downloaded messages from the server by sending
  * DELE messages, depending on if -d parameter was inputted.
+ * If both -n and -d are inputted, only new downloaded messages
+ * will be downloaded.
  */
 int POP3_handler::msg_parser(int msg_id)
 {
@@ -458,12 +478,15 @@ int POP3_handler::msg_parser(int msg_id)
     int downloaded_msgs = 0;
     std::string msg_text;
     std::smatch match;
+    bool delete_msg = false;
+    bool new_msg = false;
 
     static const std::regex ID_regex("Message-Id: <.+@.+>", std::regex_constants::icase);
     static const std::regex termination_rgx ("\r\n\\.\r\n");
     static std::regex dotByteStuff_rgx ("\r\n\\.\\.");
     static std::regex ok_rgx("\\+OK (.*)\r\n");
     static std::regex err_regex("-ERR .*\r\n");
+
 
     /* Finds out, how many emails we have in out dir */
     int emails_n = count_emails(this->out_dir);
@@ -485,6 +508,7 @@ int POP3_handler::msg_parser(int msg_id)
                 if (this->msgID_lookup(match.str()) == true)
                 {
                     downloaded_msgs--;
+                    new_msg = false;
                     break;
                 }
             }
@@ -493,6 +517,7 @@ int POP3_handler::msg_parser(int msg_id)
             if (this->msgID_lookup(match.str()) == false)
             {
                 add_ID(match.str());
+                new_msg = true;
             }
 
             /* Removing +OK line */
@@ -504,6 +529,8 @@ int POP3_handler::msg_parser(int msg_id)
             /* Removing termination octet and CRLF */
             msg_text.erase(msg_text.length() - 3, 3);
             flush_recv_buffer();
+
+            delete_msg = true;
             break;
         }
         this->flush_recv_buffer();
@@ -512,16 +539,23 @@ int POP3_handler::msg_parser(int msg_id)
     /* Writing msg body into files */
     if (std::regex_search(msg_text.begin(), msg_text.end(), dotByteStuff_rgx))
     {
-        std::string replaced_text = std::regex_replace(msg_text, dotByteStuff_rgx, "\r\n.");
-        create_mail_file(this->get_out_dir(), replaced_text, emails_n);
-        msg_text.clear();
+        if (new_msg == true) {
+
+            std::string mail_name = match.str().substr(0, match.str().length());
+            std::string replaced_text = std::regex_replace(msg_text, dotByteStuff_rgx, "\r\n.");
+            create_mail_file(this->get_out_dir(), replaced_text, mail_name);
+            msg_text.clear();
+        }
     } else {
-        create_mail_file(this->get_out_dir(), msg_text, emails_n);
-        msg_text.clear();
+        if (new_msg == true) {
+            std::string mail_name = match.str().substr(0, match.str().length());
+            create_mail_file(this->get_out_dir(), msg_text, mail_name);
+            msg_text.clear();
+        }
     }
 
     /* Deleting emails from pop3 server */
-    if (this->get_flag(DELETE_FLAG) == true)
+    if (this->get_flag(DELETE_FLAG) == true && delete_msg == true)
     {
         send_buffer_length = this->set_send_buffer("DELE " + std::to_string(msg_id) + "\r\n");
         BIO_write(this->get_handler_file_descriptor(), (const void *) send_buffer, send_buffer_length);
@@ -535,7 +569,7 @@ int POP3_handler::msg_parser(int msg_id)
     return downloaded_msgs;
 }
 
-/* Function finds message id in msg_IDs file. User case-insesitive
+/* Function finds message id in msg_IDs file. Uses case-insesitive
  * regex.
  */
 bool POP3_handler::msgID_lookup(std::string id)
@@ -550,7 +584,6 @@ bool POP3_handler::msgID_lookup(std::string id)
         id = std::regex_replace(id, plus_regex, "\\+");
     }
 
-    PRINT(id);
     std::regex msg_ID_regex (id);
     std::string line;
 

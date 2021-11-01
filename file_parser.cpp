@@ -49,9 +49,9 @@ int verify_path(std::string argPath, int type) {
 /*
  * Creates file to hold the message content.
  */
-int create_mail_file(std::string out_dir, std::string msg_text, int msg_num)
+int create_mail_file(std::string out_dir, std::string msg_text, std::string mail_name)
 {
-    std::string filename = "email_" + std::to_string(msg_num) + ".txt";
+    std::string filename = "email_" + mail_name + ".txt";
     fs::path outDir_path(out_dir);
     outDir_path /= filename;
 
@@ -93,4 +93,75 @@ int add_ID(std::string id)
     file << id + "\n";
     file.close();
     return 0;
+}
+
+/*
+ * On startup, this function compares ID of every email in out_dir with every ID in msg_IDs.txt.
+ * If we delete a message, we also need to remove its ID from the ID file, so the email can be
+ * downloaded again, if needed and if still present on the email server.
+ * Function iterates through email files, finds the ID and compares it. If the ID is found, it's
+ * printed into tmp.txt. In the end, the old msg_IDs.txt is removed and tmp.txt is renamed to
+ * msg_IDs.txt.
+ */
+void delete_removed_IDs(std::string path_to_dir)
+{
+    fs::path outDirPath (path_to_dir);
+    std::fstream ID_file("msg_IDs.txt");
+    std::ofstream tmp_file("tmp.txt");
+
+    std::string IDfile_ID;
+    std::smatch currentEmail_ID;
+
+    std::string currentEmail_line;
+    bool ID_found = false;
+
+    static const std::regex regex_ID("Message-Id: <.+@.+>", std::regex_constants::icase);
+
+    /* Iterating through email files in out_dir */
+    for (auto const& dir_entry: fs::directory_iterator{outDirPath}) {
+        ID_file.seekg(0);
+        std::fstream email_file(dir_entry.path());
+
+        /* Reading lines from email file until we find email_id */
+        while (std::getline(email_file, currentEmail_line))
+        {
+            /* We found ID and save the match, which is the id */
+            if (std::regex_search(currentEmail_line, currentEmail_ID, regex_ID) == true)
+            {
+
+                /* We get lines from ID file */
+                while (std::getline(ID_file, IDfile_ID))
+                {
+                    if (strcmp(currentEmail_ID.str().c_str(), IDfile_ID.c_str()) == 0)
+                    {
+                        ID_found = true;
+                        break;
+                    } else
+                    {
+                        ID_found = false;
+                    }
+                }
+                break;
+            }
+        }
+
+        if (ID_found == true)
+        {
+            tmp_file << IDfile_ID << std::endl;
+
+        } /*else if (ID_found == false)
+        {
+            std::cout << "ID NOT FOUND: " << IDfile_ID << ", DELETING"  << std::endl;
+        }*/
+
+        IDfile_ID.clear();
+        currentEmail_ID.str().clear();
+        currentEmail_line.clear();
+    }
+
+    tmp_file.close();
+    ID_file.close();
+    remove("msg_IDs.txt");
+    rename("tmp.txt", "msg_IDs.txt");
+
 }

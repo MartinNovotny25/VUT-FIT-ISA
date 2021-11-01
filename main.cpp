@@ -16,6 +16,8 @@
 #include "pop3_handler.h"
 #include "argument_parser.h"
 
+#include "file_parser.h"
+
 
 int main(int argc, char *argv[]) {
 
@@ -36,6 +38,9 @@ int main(int argc, char *argv[]) {
 
     /* We create mail_ID_file if not created */
     create_mail_ID_file();
+
+    /* Delete IDs of emails removed from client PC in out_dir */
+    delete_removed_IDs(popcl->get_out_dir());
 
     /* Depending on desired type of connection */
     /* SSL -T*/

@@ -28,10 +28,10 @@ int verify_path(std::string argPath, int type);
  *
  * @param out_dir String path to the out directory.
  * @param msg_text Email content (headers and body).
- * @param msg_num Email number, incrementing with each successive email file created.
+ * @param mail_name Substring of email id used to name the file.
  * @return 0 if successful.
 */
-int create_mail_file(std::string out_dir, std::string msg_text, int msg_num);
+int create_mail_file(std::string out_dir, std::string msg_text, std::string mail_name);
 
 /**
 * Creates a file for email IDs, if not created already.
@@ -53,5 +53,12 @@ int add_ID(std::string id);
  * @return Number of emails.
 */
 int count_emails(std::string path);
+
+/**
+*  Function removes IDs of email files, that were deleted from client PC.
+ *
+ * @return Number of emails.
+*/
+void delete_removed_IDs(std::string path_to_dir);
 
 #endif //POP3CL_FILE_PARSER_H
