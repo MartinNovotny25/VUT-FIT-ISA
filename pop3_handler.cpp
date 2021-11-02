@@ -175,6 +175,10 @@ int POP3_handler::establish_connection()
     {
         this->set_port("110");
     }
+    else if (this->get_flag(PORT_FLAG) == true && stoi(this->get_port()) != 110)
+    {
+        exit (2);
+    }
 
     std::string connection_string = this->get_address() + ":" + this->get_port();
     const char* connection_char_array = connection_string.c_str();
@@ -225,6 +229,10 @@ int POP3_handler::establish_ssl_connection()
     {
         this->set_port("995");
     }
+    else if (this->get_flag(PORT_FLAG) == true && stoi(this->get_port()) != 995)
+    {
+        exit (2);
+    }
 
     std::string hostname_port = this->get_address() + ":" + this->get_port();
     this->load_certs(ctx);
@@ -262,22 +270,30 @@ int POP3_handler::establish_tls_connection()
 {
     static std::regex err_regex("-ERR .*\r\n");
 
-    int send_buffer_length;
-    std::string connection_string = this->get_address() + ":" + this->get_port();
-    const char* connection_char_array = connection_string.c_str();
-    this->pop3_bio = BIO_new_connect(connection_char_array);
+
 
     if (this->get_flag(PORT_FLAG) == false)
     {
         this->set_port("110");
     }
+    else if (this->get_flag(PORT_FLAG) == true && stoi(this->get_port()) != 110)
+    {
+        exit (2);
+    }
+
+    int send_buffer_length;
+    std::string connection_string = this->get_address() + ":" + this->get_port();
+    const char* connection_char_array = connection_string.c_str();
+    this->pop3_bio = BIO_new_connect(connection_char_array);
+
 
     if (this->get_handler_file_descriptor() == nullptr)
     {
         return -1;
     }
 
-    if (BIO_do_connect(this->get_handler_file_descriptor()) <= 0)
+    //if (BIO_do_connect(this->get_handler_file_descriptor()) <= 0)
+    if (BIO_do_connect(this->pop3_bio) <= 0)
     {
         return -1;
     }

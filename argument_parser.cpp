@@ -29,6 +29,7 @@ int arg_parse(int argc, char **argv, POP3_handler* pop3_client) {
 
         if (strcmp(argv[i], "-p") == 0)
         {
+
             if (pop3_client->get_flag(PORT_FLAG) == true)
             {
                 exit(1);
